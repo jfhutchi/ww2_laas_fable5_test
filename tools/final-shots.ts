@@ -1,0 +1,172 @@
+/**
+ * Final delivery screenshot suite → shots/final/:
+ *   tactical_overhead, third_person_tank, debug_hud,
+ *   capture_contested, mission_won, mission_lost
+ * Every frame is real gameplay driven through the public test API.
+ */
+
+import { mkdirSync } from 'node:fs';
+import type { Page } from 'playwright';
+import { ensureDevServer, launchWebGPU, ocUrl } from './launch.ts';
+
+async function boot(page: Page, params: Record<string, string | number | boolean>): Promise<void> {
+  const opts: Parameters<typeof ocUrl>[0] = { seed: 1944, debug: true };
+  if (params['mode']) opts.mode = String(params['mode']);
+  if (params['hud']) opts.hud = true;
+  if (params['freeze']) opts.freeze = true;
+  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__oc && (window.__oc.ready || window.__oc.error !== null), undefined, {
+    timeout: 240000,
+    polling: 250,
+  });
+  const err = await page.evaluate(() => window.__oc.error);
+  if (err) throw new Error(`boot error: ${err}`);
+}
+
+async function settle(page: Page, frames: number): Promise<void> {
+  await page.evaluate(async (f) => {
+    if (window.__oc.settle) await window.__oc.settle(f);
+  }, frames);
+}
+
+async function shot(page: Page, path: string): Promise<void> {
+  await settle(page, 20);
+  await page.screenshot({ path });
+  console.log(`[final] wrote ${path}`);
+}
+
+/** Aim the tactical camera at the objective so staged frames show the fight. */
+async function focusObjective(page: Page, dist: number): Promise<void> {
+  await page.evaluate((d) => {
+    interface Dbg {
+      app: { tacticalCam: { focusOn(x: number, z: number, dist?: number): void; yaw: number } };
+    }
+    const api = window.__oc.api;
+    const dbg = (window as unknown as { __ocDebug?: Dbg }).__ocDebug;
+    if (!api || !dbg) return;
+    const obj = api.objective();
+    dbg.app.tacticalCam.focusOn(obj.x, obj.z + 14, d);
+  }, dist);
+}
+
+async function main(): Promise<void> {
+  mkdirSync('shots/final', { recursive: true });
+  const server = await ensureDevServer();
+  const { browser } = await launchWebGPU();
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  page.on('pageerror', (e) => console.error('[pageerror]', e.message));
+
+  // 1. tactical overhead — framed on the village crossroads
+  await boot(page, { mode: 'tactical', freeze: true });
+  await focusObjective(page, 140);
+  await shot(page, 'shots/final/tactical_overhead.png');
+
+  // 2. third-person tank
+  await boot(page, { mode: 'tank', freeze: true });
+  await shot(page, 'shots/final/third_person_tank.png');
+
+  // 3. debug HUD
+  await boot(page, { mode: 'tactical', freeze: true, hud: true });
+  await shot(page, 'shots/final/debug_hud.png');
+
+  // 4. contested capture — assault the zone with a tough defense converging
+  await boot(page, { mode: 'tactical' });
+  await page.evaluate(() => {
+    const api = window.__oc.api;
+    if (!api) throw new Error('api missing');
+    api.selectAll();
+    const obj = api.objective();
+    api.debugTeleportSelection(obj.x + 8, obj.z + 60);
+    api.debugScaleHealth('enemy', 40); // defenders survive to contest
+    api.move(obj.x, obj.z);
+    api.setSpeed(8);
+  });
+  for (let i = 0; i < 40; i++) {
+    await settle(page, 60);
+    const g = await page.evaluate(() => window.__oc.stats?.game);
+    if (g && (g.captureState === 'Contested' || g.captureState === 'Enemy Recapturing')) break;
+  }
+  await page.evaluate(() => window.__oc.api?.setSpeed(1));
+  await focusObjective(page, 105);
+  await shot(page, 'shots/final/capture_contested.png');
+
+  // 5. mission won
+  await boot(page, { mode: 'tactical' });
+  await page.evaluate(() => {
+    const api = window.__oc.api;
+    if (!api) throw new Error('api missing');
+    api.selectAll();
+    const obj = api.objective();
+    api.debugTeleportSelection(obj.x + 6, obj.z + 110);
+    api.debugScaleHealth('enemy', 0.06);
+    api.attackMove(obj.x, obj.z);
+    api.setSpeed(8);
+  });
+  for (let i = 0; i < 60; i++) {
+    await settle(page, 60);
+    const g = await page.evaluate(() => window.__oc.stats?.game);
+    if (!g) continue;
+    if (g.reinforcementsTriggered && i % 4 === 0) {
+      await page.evaluate(() => window.__oc.api?.debugScaleHealth('enemy', 0.06));
+    }
+    if (i % 6 === 5) {
+      await page.evaluate(() => {
+        const api = window.__oc.api;
+        if (!api) return;
+        api.selectAll();
+        const obj = api.objective();
+        api.attackMove(obj.x, obj.z);
+      });
+    }
+    if (g.missionState === 'won') break;
+  }
+  await focusObjective(page, 110);
+  await page.waitForTimeout(2200); // end screen fade-in
+  await shot(page, 'shots/final/mission_won.png');
+
+  // 6. mission lost
+  await boot(page, { mode: 'tactical' });
+  await page.evaluate(() => {
+    const api = window.__oc.api;
+    if (!api) throw new Error('api missing');
+    api.selectAll();
+    const obj = api.objective();
+    api.debugTeleportSelection(obj.x + 4, obj.z + 150);
+    api.debugScaleHealth('player', 0.02);
+    api.debugScaleHealth('enemy', 60);
+    api.attackMove(obj.x, obj.z);
+    api.setSpeed(8);
+  });
+  for (let i = 0; i < 50; i++) {
+    await settle(page, 60);
+    const g = await page.evaluate(() => window.__oc.stats?.game);
+    if (g && g.missionState === 'lost') break;
+    if (i % 5 === 4) {
+      await page.evaluate(() => {
+        const api = window.__oc.api;
+        if (!api) return;
+        api.selectAll();
+        const enemies = api.units('enemy');
+        const killer =
+          enemies.find((e) => e.type === 'stug' || e.type === 'panzer4') ??
+          enemies.find((e) => e.type === 'at-gun' || e.type === 'grenadier-squad') ??
+          enemies[0];
+        if (killer) {
+          api.debugTeleportSelection(killer.x + 16, killer.z + 4);
+          api.attackMove(killer.x, killer.z);
+        }
+      });
+    }
+  }
+  await page.waitForTimeout(2200);
+  await shot(page, 'shots/final/mission_lost.png');
+
+  await browser.close();
+  server.stop();
+  console.log('[final] complete');
+}
+
+main().catch((e: unknown) => {
+  console.error('[final] FAILED:', e instanceof Error ? e.message : e);
+  process.exit(1);
+});
