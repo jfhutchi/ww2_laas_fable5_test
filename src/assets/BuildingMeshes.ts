@@ -16,20 +16,24 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
+import type { MeshStandardNodeMaterial } from 'three/webgpu';
 import type { BuildingSpec, WorldModel } from '../world/WorldTypes.ts';
 import type { Ground } from '../world/Ground.ts';
 
 // ---------------------------------------------------------------- palette
 
-const MAT_MASONRY = new MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 });
-const MAT_ROOF = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
-const MAT_WOOD = new MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+const MAT_MASONRY = detailedMaterial('masonry', { roughness: 0.94 });
+const MAT_ROOF = detailedMaterial('roof', { roughness: 0.88 });
+const MAT_WOOD = detailedMaterial('wood', { roughness: 0.85 });
 const MAT_DARK = new MeshStandardMaterial({ color: new Color(0.045, 0.04, 0.035), roughness: 1, metalness: 0 });
 
-const STONE = new Color(0.56, 0.53, 0.47);
-const PLASTER = new Color(0.72, 0.66, 0.55);
-const BRICK = new Color(0.55, 0.34, 0.26);
-const TILE_TERRACOTTA = new Color(0.5, 0.3, 0.22);
+// Normandy palette: warm cream limestone dominant (matches references), pale
+// lime plaster, a muted red brick for the occasional townhouse, terracotta tile.
+const STONE = new Color(0.72, 0.67, 0.54);
+const PLASTER = new Color(0.79, 0.74, 0.63);
+const BRICK = new Color(0.52, 0.36, 0.3);
+const TILE_TERRACOTTA = new Color(0.56, 0.32, 0.22);
 const TILE_SLATE = new Color(0.32, 0.33, 0.36);
 const WOOD_W = new Color(0.4, 0.33, 0.25);
 const CHAR = new Color(0.1, 0.09, 0.08);
@@ -150,9 +154,10 @@ function wallWithOpenings(
     // below sill / above head
     if (!o.door && o.sill > 0.05) push(left, right, 0, o.sill);
     push(left, right, o.head, height);
-    // frame + glass/door + shutters
-    const frameC = new Color().copy(WOOD_W).multiplyScalar(rng.range(0.85, 1.1));
-    const fw = 0.07;
+    // frame + glass/door + shutters. Painted cream/stone surround so the
+    // window reads against the wall (Normandy windows have light surrounds).
+    const frameC = new Color(0.8, 0.77, 0.69).multiplyScalar(rng.range(0.9, 1.08));
+    const fw = 0.08;
     const oh = o.head - (o.door ? 0 : o.sill);
     const oy = (o.door ? 0 : o.sill) + oh / 2;
     // lintel + jambs (slightly proud of the wall)
@@ -164,8 +169,8 @@ function wallWithOpenings(
       box(wood, o.width, oh, 0.06, o.u, oy, 0, doorC, rng, { mottle: 0.12 });
     } else {
       box(wood, o.width, fw, t * 1.15, o.u, o.sill - fw / 2, 0, frameC, rng, {}); // sill
-      // dark glass inset
-      box(wood, o.width * 0.92, oh * 0.92, 0.03, o.u, oy, -t * 0.18, new Color(0.05, 0.055, 0.06), rng, { mottle: 0.25 });
+      // glass inset: dark but with a cool sky-reflected tint (not pure black)
+      box(wood, o.width * 0.92, oh * 0.92, 0.03, o.u, oy, -t * 0.18, new Color(0.1, 0.13, 0.17), rng, { mottle: 0.3 });
       // cross mullion
       box(wood, 0.04, oh * 0.9, 0.05, o.u, oy, -t * 0.1, frameC, rng, {});
       box(wood, o.width * 0.9, 0.04, 0.05, o.u, oy, -t * 0.1, frameC, rng, {});
@@ -264,9 +269,16 @@ function buildHouse(spec: BuildingSpec): Group {
   const isBrick = spec.kind === 'townhouse-brick';
   const isBarn = spec.kind === 'barn';
   const isShed = spec.kind === 'shed';
-  const wallC = new Color().copy(isBrick ? BRICK : spec.kind === 'farmhouse' ? PLASTER : STONE);
+  // Limestone-dominant village (matches references): only a minority of the
+  // "brick" townhouses stay red brick; barns are mostly stone with some timber.
+  const wallC = new Color().copy(
+    isBrick && spec.seed % 5 < 2 ? BRICK : spec.kind === 'farmhouse' ? PLASTER : STONE,
+  );
   if (spec.kind === 'farmhouse' && rng.chance(0.5)) wallC.copy(STONE);
-  if (isBarn || isShed) wallC.copy(WOOD_W).multiplyScalar(rng.range(0.85, 1.05));
+  if (isBarn || isShed) {
+    if (spec.seed % 3 === 0) wallC.copy(WOOD_W).multiplyScalar(rng.range(0.85, 1.05));
+    else wallC.copy(STONE).multiplyScalar(rng.range(0.92, 1.06));
+  }
   wallC.multiplyScalar(rng.range(0.9, 1.1));
   const shutterC = rng.pick([
     new Color(0.28, 0.36, 0.3),
@@ -330,7 +342,9 @@ function buildHouse(spec: BuildingSpec): Group {
     masonry.push(...back);
     for (const side of [-1, 1]) {
       const end: BufferGeometry[] = [];
-      const endOpen = W > 7 || isShed ? [] : rng.chance(0.4) ? facadeOpenings(D, 1, false).slice(0, 1) : [];
+      // gable ends get windows too (wider houses more of them) so long walls
+      // aren't blank — previously W>7 buildings had none, reading as bare boxes
+      const endOpen = isShed ? [] : facadeOpenings(D, floors, false).slice(0, W > 7 ? 3 : 1);
       wallWithOpenings(end, wood, D, H, t, endOpen, wallC, shutterC, rng, charAmount);
       for (const g of end) g.rotateY((Math.PI / 2) * side), g.translate((W / 2 - t / 2) * side, 0, 0);
       masonry.push(...end);
@@ -339,6 +353,52 @@ function buildHouse(spec: BuildingSpec): Group {
 
   // dark interior blocker
   box(masonry, W - t * 2.2, ruined ? H * 0.4 : H, D - t * 2.2, 0, (ruined ? H * 0.4 : H) / 2, 0, new Color(0.05, 0.045, 0.04), rng, { mottle: 0.1 });
+
+  // facade relief — quoins: alternating proud corner blocks on masonry
+  if (!isBarn && !isShed && !ruined) {
+    const quoinC = new Color().copy(wallC).multiplyScalar(1.18);
+    for (const [cxs, czs] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ] as const) {
+      const courses = Math.floor(H / 0.42);
+      for (let q = 0; q < courses; q++) {
+        const big = q % 2 === 0;
+        box(
+          masonry,
+          big ? 0.42 : 0.3,
+          0.34,
+          big ? 0.3 : 0.42,
+          cxs * (W / 2 - 0.08),
+          0.21 + q * 0.42,
+          czs * (D / 2 - 0.08),
+          quoinC,
+          rng,
+          { jitter: 0.012, char: charAmount },
+        );
+      }
+    }
+  }
+
+  // Norman colombage: dark timber framing on plaster facades
+  const isPlasterFacade = !isBrick && !isBarn && !isShed && wallC.g > 0.5;
+  if (isPlasterFacade && !ruined && rng.chance(0.75)) {
+    const timberC = new Color(0.21, 0.16, 0.11);
+    for (const side of [-1, 1]) {
+      const zOff = (D / 2 - t / 2 + 0.035) * side;
+      const nPosts = Math.max(3, Math.floor(W / 1.4));
+      for (let i = 0; i <= nPosts; i++) {
+        const u = -W / 2 + (i / nPosts) * W;
+        box(wood, 0.12, H - 0.2, 0.05, u, H / 2, zOff, timberC, rng, { mottle: 0.12 });
+      }
+      // horizontal rails between the posts
+      for (const hy of [H * 0.32, H * 0.66]) {
+        box(wood, W - 0.15, 0.11, 0.05, 0, hy, zOff, timberC, rng, { mottle: 0.12 });
+      }
+    }
+  }
 
   const rise = (isBarn ? 0.62 : 0.52) * D;
   if (!ruined) {
@@ -361,11 +421,16 @@ function buildHouse(spec: BuildingSpec): Group {
     gableRoof(roofRot, wood, W, D, H, rise, tileC, rng, dmg, charAmount);
     // roof rows were built with ridge along X — matches house (ridge along local X)
     roof.push(...roofRot);
-    // chimney
+    // chimney: a solid stack from the roof up to ~1.1 m proud of the ridge,
+    // with the cap sitting ON the stack top (previously the cap floated a
+    // metre above the shaft and read as a stray dark quad against the sky).
     if (!isShed && !isBarn) {
       const cx = rng.range(-W * 0.3, W * 0.3);
-      box(masonry, 0.55, rise + 1.4, 0.55, cx, H + 0.4, 0, new Color().copy(isBrick ? BRICK : STONE).multiplyScalar(0.92), rng, { jitter: 0.01, char: charAmount });
-      box(masonry, 0.75, 0.12, 0.75, cx, H + rise + 1.15, 0, new Color(0.4, 0.38, 0.34), rng, {});
+      const chTop = H + rise + 1.1;
+      const chBot = H + 0.3;
+      const chH = chTop - chBot;
+      box(masonry, 0.6, chH, 0.6, cx, (chTop + chBot) / 2, 0, new Color().copy(isBrick ? BRICK : STONE).multiplyScalar(0.9), rng, { jitter: 0.01, char: charAmount });
+      box(masonry, 0.82, 0.18, 0.82, cx, chTop + 0.06, 0, new Color(0.38, 0.36, 0.32), rng, {});
     }
   } else {
     // ruined: jagged toppled blocks along the broken wall tops
@@ -405,11 +470,11 @@ function buildHouse(spec: BuildingSpec): Group {
   // ruined walls: crop height — rebuild masonry pieces above break line is complex;
   // instead we scale wall pieces' Y via a post-pass on merged geometry (cheap visual read):
   const group = new Group();
-  const addMerged = (list: BufferGeometry[], mat: MeshStandardMaterial): void => {
+  const addMerged = (list: BufferGeometry[], mat: MeshStandardMaterial | MeshStandardNodeMaterial): void => {
     if (list.length === 0) return;
     const merged = mergeGeometries(list, false);
     if (!merged) return;
-    if (ruined && mat === MAT_MASONRY) {
+    if (ruined && (mat as unknown) === (MAT_MASONRY as unknown)) {
       // clamp vertices above the break height with jitter → jagged broken tops
       const pos = merged.attributes['position'];
       if (pos) {
@@ -556,7 +621,7 @@ function buildChurch(spec: BuildingSpec): Group {
   }
 
   const group = new Group();
-  const addMerged = (list: BufferGeometry[], mat: MeshStandardMaterial): void => {
+  const addMerged = (list: BufferGeometry[], mat: MeshStandardMaterial | MeshStandardNodeMaterial): void => {
     if (list.length === 0) return;
     const merged = mergeGeometries(list, false);
     if (!merged) return;

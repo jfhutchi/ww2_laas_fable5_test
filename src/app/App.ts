@@ -11,6 +11,9 @@ import { reportProgress } from './Hooks.ts';
 import { Renderer } from '../render/Renderer.ts';
 import { Lighting } from '../render/Lighting.ts';
 import { PostStack } from '../render/PostStack.ts';
+import { buildEnvironment } from '../render/Environment.ts';
+import { buildCloudCoverage } from '../render/CloudShadows.ts';
+import { VolumetricClouds } from '../render/VolumetricClouds.ts';
 import { TacticalCamera } from '../render/TacticalCamera.ts';
 import { TankCamera, type TankCameraTarget } from '../render/TankCamera.ts';
 import { DebugHud } from '../render/DebugHud.ts';
@@ -75,6 +78,7 @@ export class App {
   private minimap: Minimap | null = null;
   private driveOverride: { throttle: number; steer: number; until: number } | null = null;
   private captureFlag: CaptureFlag | null = null;
+  private vclouds: VolumetricClouds | null = null;
   private post: PostStack | null = null;
   private dustAcc = new Map<number, number>();
   private trackAcc = new Map<number, { x: number; z: number }>();
@@ -111,8 +115,13 @@ export class App {
 
     reportProgress(hooks, 0.15, 'lighting');
     this.scene.background = new Color(0.62, 0.7, 0.82);
-    this.scene.fog = new Fog(new Color(0.79, 0.73, 0.63), 720, 4000);
+    // high/ultra get post-space aerial perspective (per-channel extinction,
+    // altitude haze, sun-side scatter); linear fog only serves the low preset
+    if (config.preset === 'low') {
+      this.scene.fog = new Fog(new Color(0.79, 0.73, 0.63), 720, 4000);
+    }
     this.lighting = new Lighting(this.scene, config.preset);
+    buildEnvironment(this.scene, 0.5);
 
     reportProgress(hooks, 0.2, 'generating world');
     await this.world.build(
@@ -124,6 +133,9 @@ export class App {
     this.scene.add(this.world.group);
     this.tacticalCam.sampleHeight = (x, z) => this.world.sampleHeight(x, z);
     this.tankCam.sampleHeight = (x, z) => this.world.sampleHeight(x, z);
+
+    // CSM fits the active view camera
+    this.lighting.setShadowCamera(this.tacticalCam.camera);
 
     // default tactical framing: over the crossroads from the approach side
     const spawn = this.world.model.playerSpawn;
@@ -168,13 +180,23 @@ export class App {
       (window as unknown as { __ocDebug?: unknown }).__ocDebug = { app: this };
     }
 
-    // GTAO + bloom + vignette on high/ultra (low renders directly)
+    // GTAO + aerial perspective + volumetric clouds + bloom + grade
     if (config.preset !== 'low') {
+      const noClouds = new URLSearchParams(location.search).get('noclouds') === '1';
+      const sunToward = this.lighting.sunDir.clone().negate();
+      if (!noClouds) {
+        reportProgress(hooks, 0.91, 'baking cloud noise');
+        this.vclouds = new VolumetricClouds(config.seed, sunToward);
+        await this.vclouds.init(this.renderer.three);
+      }
       reportProgress(hooks, 0.93, 'post-processing stack');
-      this.post = new PostStack(this.renderer.three, this.scene, [
-        this.tacticalCam.camera,
-        this.tankCam.camera,
-      ]);
+      this.post = new PostStack(
+        this.renderer.three,
+        this.scene,
+        [this.tacticalCam.camera, this.tankCam.camera],
+        buildCloudCoverage(config.seed),
+        this.vclouds,
+      );
     }
 
     reportProgress(hooks, 0.97, 'first frame');
@@ -400,6 +422,8 @@ export class App {
   setMode(mode: GameMode): void {
     if (this.mode === mode) return;
     this.mode = mode;
+    this.post?.onCameraSwap(); // flush TAA history — stale reprojection ghosts
+    this.lighting.setShadowCamera(mode === 'tank' ? this.tankCam.camera : this.tacticalCam.camera);
     this.bus.emit('mode:changed', { mode });
     if (mode !== 'tank') this.input.exitPointerLock();
     const tacticalVisible = mode === 'tactical';
@@ -534,6 +558,10 @@ export class App {
     this.captureFlag?.update(dt, gs?.captureStateLabel ?? 'Neutral', gs?.captureProgress ?? 0);
     this.audio.setListener({ x: cam.position.x, y: cam.position.y, z: cam.position.z });
 
+    if (this.post) this.post.setDriftTime(this.time.simTime);
+    if (this.vclouds && !this.time.frozen && this.time.speed > 0) {
+      this.vclouds.tick(dt * this.time.speed);
+    }
     if (!this.post || !this.post.render(cam)) {
       this.renderer.three.render(this.scene, cam);
     }

@@ -15,9 +15,9 @@ export interface TankCameraTarget {
 }
 
 const PRESETS = [
-  { back: 9.5, up: 3.6, side: 1.4, fov: 52 },
-  { back: 14, up: 5.2, side: 1.8, fov: 48 },
-  { back: 6.5, up: 2.6, side: 1.1, fov: 58 },
+  { back: 7.6, up: 2.7, side: 0.9, fov: 50 }, // reference framing: low, close
+  { back: 12, up: 4.4, side: 1.6, fov: 48 },
+  { back: 5.6, up: 2.2, side: 0.9, fov: 56 },
 ] as const;
 
 export class TankCamera {

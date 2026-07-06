@@ -41,15 +41,26 @@ import type { GraphicsPreset } from '../app/Config.ts';
 import { Rng, hash2D } from '../core/Random.ts';
 import { valueNoise2D } from '../core/Noise.ts';
 import { clamp01, lerp, smoothstep } from '../core/MathUtil.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
+import { positionLocal, sin, time, vec3 as tslVec3 } from 'three/tsl';
+const v3 = tslVec3 as unknown as (x: unknown, y: unknown, z: unknown) => typeof positionLocal;
+import type { MeshStandardNodeMaterial } from 'three/webgpu';
 
 // ---------------------------------------------------------------- materials
 // Shared at module scope so repeated builds reuse pipelines. Albedo lives in
 // vertex colors (per-face weathering) × instance colors (per-piece jitter).
 
-const stoneMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0.02 });
-const foliageMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
-const woodMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0 });
-const bermMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.98, metalness: 0 });
+const stoneMaterial = detailedMaterial('stone', { roughness: 0.94, metalness: 0.02 });
+const foliageMaterial = detailedMaterial('foliage', { roughness: 0.92 });
+// hedgerow crowns breathe gently in the wind
+{
+  const phase = positionLocal.x.mul(0.13).add(positionLocal.z.mul(0.17));
+  const sway = sin(time.mul(0.85).add(phase)).mul(0.055);
+  const sway2 = sin(time.mul(1.21).add(phase.mul(1.4)).add(0.9)).mul(0.035);
+  foliageMaterial.positionNode = positionLocal.add(v3(sway, sway2.mul(0.4), sway2));
+}
+const woodMaterial = detailedMaterial('wood', { roughness: 0.86 });
+const bermMaterial = detailedMaterial('soil', { roughness: 0.98 });
 
 // ------------------------------------------------------------------- tuning
 
@@ -232,7 +243,7 @@ function pickBucket(arr: Bucket[], rng: Rng): Bucket {
   return b;
 }
 
-function realize(group: Group, b: Bucket, material: MeshStandardMaterial, name: string): void {
+function realize(group: Group, b: Bucket, material: MeshStandardMaterial | MeshStandardNodeMaterial, name: string): void {
   const n = b.matrices.length;
   if (n === 0) return;
   const mesh = new InstancedMesh(b.geometry, material, n);

@@ -203,16 +203,127 @@ export function generateLayout(seed: number): WorldModel {
   addBuilding('church', churchX, churchZ, churchRot, 7.5, 13.5, 7.5, 2, 'damaged');
   const churchSquare = { x: churchX - Math.cos(churchDir) * 22, z: churchZ - Math.sin(churchDir) * 22 };
 
+  // --- civic ground: a cobbled parvis in front of the church and a small
+  // town-square apron at the crossroads. Added to the road network BEFORE
+  // housing so frontages naturally address them (they read as paved plazas
+  // in the terrain/road meshes and as fast ground in the nav grid).
+  roads.push({
+    id: id(),
+    kind: 'paved',
+    width: 24,
+    points: [
+      { x: churchAnchor.x, z: churchAnchor.z },
+      { x: churchSquare.x, z: churchSquare.z },
+      {
+        x: churchSquare.x + (churchX - churchSquare.x) * 0.45,
+        z: churchSquare.z + (churchZ - churchSquare.z) * 0.45,
+      },
+    ],
+  });
+  {
+    const n0 = pointAtRadius(armPoints[0] ?? [], 16) ?? { x: 0, z: -16 };
+    const s0 = pointAtRadius(armPoints[2] ?? [], 16) ?? { x: 0, z: 16 };
+    roads.push({ id: id(), kind: 'paved', width: 20, points: [n0, { x: 0, z: 0 }, s0] });
+    // rond-point: circular paved ring around the monument/flag, as in the
+    // reference frame's village centre
+    const ring: RoadNode[] = [];
+    for (let i = 0; i <= 22; i++) {
+      const a = (i / 22) * Math.PI * 2;
+      ring.push({ x: Math.cos(a) * 15, z: Math.sin(a) * 15 });
+    }
+    roads.push({ id: id(), kind: 'paved', width: 8, points: ring });
+  }
+
+  // Rotated-rect test against every placed building (+margin). Barrier
+  // pieces must never thread through a house.
+  const insideAnyBuilding = (x: number, z: number, margin: number): boolean => {
+    for (const b of buildings) {
+      const reach = Math.hypot(b.halfW + margin, b.halfD + margin);
+      const dx = x - b.x;
+      const dz = z - b.z;
+      if (dx * dx + dz * dz > reach * reach) continue;
+      const cos = Math.cos(b.rotation);
+      const sin = Math.sin(b.rotation);
+      const lx = dx * cos + dz * sin;
+      const lz = -dx * sin + dz * cos;
+      if (Math.abs(lx) <= b.halfW + margin && Math.abs(lz) <= b.halfD + margin) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Emit a wall/fence run in short pieces, dropping every piece that would
+   * cross a road or clip a building — walls end cleanly at obstacles.
+   */
+  const addBarrierRun = (
+    kind: BarrierKind,
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    height: number,
+    broken: number,
+    roadClearance: number,
+  ): void => {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const pieces = Math.max(1, Math.round(len / 5.5));
+    for (let p = 0; p < pieces; p++) {
+      const t0 = p / pieces;
+      const t1 = (p + 1) / pieces;
+      let blocked = false;
+      for (let s = 0; s <= 3; s++) {
+        const t = t0 + ((t1 - t0) * s) / 3;
+        const x = x0 + (x1 - x0) * t;
+        const z = z0 + (z1 - z0) * t;
+        if (distToAnyRoad(x, z) < roadClearance || insideAnyBuilding(x, z, 0.55)) {
+          blocked = true;
+          break;
+        }
+      }
+      if (blocked) continue;
+      addBarrier(kind, x0 + (x1 - x0) * t0, z0 + (z1 - z0) * t0, x0 + (x1 - x0) * t1, z0 + (z1 - z0) * t1, height, broken);
+    }
+  };
+
+  // --- plaza ring: townhouses enclosing the crossroads square, fronts to
+  // the centre, gaps left at the four road exits (reference composition)
+  {
+    const nRing = 22;
+    const angDist = (a: number, b: number): number =>
+      Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    for (let i = 0; i < nRing; i++) {
+      const a = (i / nRing) * Math.PI * 2 + villageRng.range(-0.08, 0.08);
+      let nearArm = false;
+      for (const armA of armAngles) {
+        if (angDist(a, armA) < 0.26) {
+          nearArm = true;
+          break;
+        }
+      }
+      if (nearArm) continue;
+      const r = villageRng.range(30, 52);
+      const bx = Math.cos(a) * r;
+      const bz = Math.sin(a) * r;
+      if (Math.hypot(bx - churchX, bz - churchZ) < 24) continue;
+      if (distToAnyRoad(bx, bz) < 4.5) continue;
+      const kind: BuildingKind = villageRng.chance(0.6) ? 'townhouse-stone' : 'townhouse-brick';
+      const hw = villageRng.range(3.8, 5.2);
+      const hd = villageRng.range(3.2, 4.2);
+      // door faces the square: outward normal points from centre to house
+      addBuilding(kind, bx, bz, a + Math.PI / 2, hw, hd, villageRng.range(5.6, 6.6), 2, damageFor(bx, bz));
+    }
+  }
+
   // --- town core: walk each arm, place frontage buildings
   for (let a = 0; a < 4; a++) {
     const pts = armPoints[a] ?? [];
     for (const side of [-1, 1]) {
-      let d = 26 + villageRng.range(0, 10);
-      while (d < VILLAGE_RADIUS) {
+      let d = 56 + villageRng.range(0, 8);
+      while (d < 165) {
         const p = pointAtRadius(pts, d);
         const roadDir = dirAtRadius(pts, d);
         if (!p) break;
-        const inCore = d < 110;
+        const inCore = d < 115;
         const kind: BuildingKind = inCore
           ? villageRng.chance(0.55)
             ? 'townhouse-stone'
@@ -235,7 +346,7 @@ export function generateLayout(seed: number): WorldModel {
           const rot = normal + Math.PI / 2; // gable parallel to road, door faces road
           addBuilding(kind, bx, bz, rot, hw, hd, wallH, floors, damageFor(bx, bz));
         }
-        d += hw * 2 + villageRng.range(inCore ? 3 : 12, inCore ? 9 : 34);
+        d += hw * 2 + villageRng.range(inCore ? 2.5 : 14, inCore ? 7 : 36);
       }
     }
   }
@@ -384,15 +495,17 @@ export function generateLayout(seed: number): WorldModel {
         const z1 = a.z + (b.z - a.z) * t1;
         // skip pieces that cross or crowd a road — sample along the piece,
         // not just the midpoint, so field boundaries never wall off a road
-        let nearRoad = false;
+        let blockedPiece = false;
         for (let s = 0; s <= 4; s++) {
           const t = s / 4;
-          if (distToAnyRoad(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t) < 3.2) {
-            nearRoad = true;
+          const sx = x0 + (x1 - x0) * t;
+          const sz = z0 + (z1 - z0) * t;
+          if (distToAnyRoad(sx, sz) < 3.2 || insideAnyBuilding(sx, sz, 0.8)) {
+            blockedPiece = true;
             break;
           }
         }
-        if (nearRoad) continue;
+        if (blockedPiece) continue;
         const mx = (x0 + x1) / 2;
         const mz = (z0 + z1) / 2;
         if (Math.hypot(mx, mz) < VILLAGE_RADIUS * 0.48) continue;
@@ -419,10 +532,10 @@ export function generateLayout(seed: number): WorldModel {
     if (i === 3) {
       const gx = (a.x + b.x) / 2;
       const gz = (a.z + b.z) / 2;
-      addBarrier('stone-wall', a.x, a.z, gx - (gx - a.x) * 0.25, gz - (gz - a.z) * 0.25, 1.3);
-      addBarrier('stone-wall', gx + (b.x - gx) * 0.25, gz + (b.z - gz) * 0.25, b.x, b.z, 1.3);
+      addBarrierRun('stone-wall', a.x, a.z, gx - (gx - a.x) * 0.25, gz - (gz - a.z) * 0.25, 1.3, 0, 1.6);
+      addBarrierRun('stone-wall', gx + (b.x - gx) * 0.25, gz + (b.z - gz) * 0.25, b.x, b.z, 1.3, 0, 1.6);
     } else {
-      addBarrier('stone-wall', a.x, a.z, b.x, b.z, 1.3, damageRng.chance(0.3) ? damageRng.range(0.2, 0.7) : 0);
+      addBarrierRun('stone-wall', a.x, a.z, b.x, b.z, 1.3, damageRng.chance(0.3) ? damageRng.range(0.2, 0.7) : 0, 1.6);
     }
   }
 
@@ -440,9 +553,9 @@ export function generateLayout(seed: number): WorldModel {
     void back;
     const wallH = barrierRng.range(1, 1.35);
     const brokenAmt = b.damage === 'ruined' ? 0.7 : b.damage === 'damaged' ? 0.35 : 0;
-    addBarrier('stone-wall', c0.x, c0.z, c3.x, c3.z, wallH, brokenAmt * barrierRng.float());
-    addBarrier('stone-wall', c1.x, c1.z, c2.x, c2.z, wallH, brokenAmt * barrierRng.float());
-    addBarrier('stone-wall', c3.x, c3.z, c2.x, c2.z, wallH, brokenAmt * barrierRng.float());
+    addBarrierRun('stone-wall', c0.x, c0.z, c3.x, c3.z, wallH, brokenAmt * barrierRng.float(), 2.2);
+    addBarrierRun('stone-wall', c1.x, c1.z, c2.x, c2.z, wallH, brokenAmt * barrierRng.float(), 2.2);
+    addBarrierRun('stone-wall', c3.x, c3.z, c2.x, c2.z, wallH, brokenAmt * barrierRng.float(), 2.2);
   }
 
   // pasture fences
@@ -455,16 +568,7 @@ export function generateLayout(seed: number): WorldModel {
       if (!a || !b) continue;
       const inX = (b.x - a.x) * 0.12;
       const inZ = (b.z - a.z) * 0.12;
-      let crossesRoad = false;
-      for (let s = 0; s <= 5; s++) {
-        const t = s / 5;
-        if (distToAnyRoad(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t) < 3.5) {
-          crossesRoad = true;
-          break;
-        }
-      }
-      if (crossesRoad) continue;
-      addBarrier('fence', a.x + inX, a.z + inZ, b.x - inX, b.z - inZ, 1.05);
+      addBarrierRun('fence', a.x + inX, a.z + inZ, b.x - inX, b.z - inZ, 1.05, 0, 3.5);
     }
   }
 
@@ -520,9 +624,29 @@ export function generateLayout(seed: number): WorldModel {
     }
   }
 
-  // hedge oaks on hedgerow lines
+  // roadside trees framing the N/E/S approaches (the W arm has the poplar avenue)
+  for (const armIdx of [0, 1, 2]) {
+    const arm = armPoints[armIdx] ?? [];
+    for (let d = 84; d < 430; d += propRng.range(13, 21)) {
+      const p = pointAtRadius(arm, d);
+      if (!p) break;
+      const roadDir = dirAtRadius(arm, d);
+      for (const side of [-1, 1]) {
+        if (propRng.chance(0.32)) continue; // natural gaps
+        const n = roadDir + (Math.PI / 2) * side;
+        const off = 5.8 + propRng.range(0, 1.8);
+        const tx = p.x + Math.cos(n) * off;
+        const tz = p.z + Math.sin(n) * off;
+        if (insideAnyBuilding(tx, tz, 1.5) || distToAnyRoad(tx, tz) < 3) continue;
+        const kind: PropKind = propRng.chance(0.55) ? 'tree-oak' : 'tree-poplar';
+        addProp(kind, tx, tz, propRng.range(0, 6.28), propRng.range(0.82, 1.25));
+      }
+    }
+  }
+
+  // hedge oaks on hedgerow lines (denser: fewer skips than before)
   for (const seg of barriers) {
-    if (seg.kind !== 'hedgerow' || propRng.chance(0.55)) continue;
+    if (seg.kind !== 'hedgerow' || propRng.chance(0.35)) continue;
     const t = propRng.float();
     const x = seg.x0 + (seg.x1 - seg.x0) * t;
     const z = seg.z0 + (seg.z1 - seg.z0) * t;

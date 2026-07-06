@@ -27,12 +27,14 @@ export type SoldierSide = 'us' | 'de';
 const MAT_SOLDIER = new MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.02 });
 const MAT_GUNMETAL = new MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.35 });
 
-const US_UNIFORM = new Color(0.37, 0.35, 0.25);
-const US_HELMET = new Color(0.3, 0.32, 0.2);
-const DE_UNIFORM = new Color(0.32, 0.34, 0.32);
-const DE_HELMET = new Color(0.27, 0.28, 0.27);
-const SKIN = new Color(0.55, 0.42, 0.32);
-const RIFLE_WOOD = new Color(0.3, 0.22, 0.14);
+// uniforms lightened so backlit soldiers keep their read under the low
+// golden-hour ambient fill (they were crushing to near-black cutouts)
+const US_UNIFORM = new Color(0.46, 0.43, 0.3);
+const US_HELMET = new Color(0.38, 0.4, 0.26);
+const DE_UNIFORM = new Color(0.43, 0.46, 0.43);
+const DE_HELMET = new Color(0.35, 0.37, 0.35);
+const SKIN = new Color(0.64, 0.48, 0.37);
+const RIFLE_WOOD = new Color(0.34, 0.24, 0.15);
 
 function paint(g: BufferGeometry, base: Color, rng: Rng, mottle = 0.08): BufferGeometry {
   const pos = g.attributes['position'];
@@ -102,10 +104,10 @@ export function buildSoldierGeometry(side: SoldierSide, pose: SoldierPose, seed:
   // head + helmet
   const headX = Math.sin(lean) * torsoLen + (pose === 'prone' ? 0.16 : 0.02);
   const headY = hipY + Math.cos(lean) * torsoLen + (pose === 'prone' ? 0.12 : 0.16);
-  const head = new SphereGeometry(0.11, 8, 6);
+  const head = new SphereGeometry(0.11, 12, 9);
   head.translate(headX, headY, 0);
   parts.push(paint(head, SKIN, rng));
-  const helmet = new SphereGeometry(0.145, 8, 6);
+  const helmet = new SphereGeometry(0.145, 14, 9);
   helmet.scale(1, side === 'de' ? 0.82 : 0.88, 1);
   helmet.translate(headX, headY + 0.055, 0);
   parts.push(paint(helmet, helmetC, rng));

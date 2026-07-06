@@ -26,11 +26,13 @@ export class Renderer {
     this.canvas.id = 'game-canvas';
     this.three = new WebGPURenderer({
       canvas: this.canvas,
-      antialias: preset !== 'low',
+      // high/ultra use TAA in the post stack (TRAANode requires MSAA off and
+      // PassNode inherits renderer samples); low renders direct with MSAA
+      antialias: preset === 'low',
       forceWebGL: false,
     });
     this.three.toneMapping = ACESFilmicToneMapping;
-    this.three.toneMappingExposure = 1.18;
+    this.three.toneMappingExposure = 1.06;
     this.three.outputColorSpace = SRGBColorSpace;
     this.three.shadowMap.enabled = true;
     this.three.shadowMap.type = PCFSoftShadowMap;

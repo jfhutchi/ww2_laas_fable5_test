@@ -238,7 +238,7 @@ export class CombatFX {
         x: s.x,
         y: this.ground.height(s.x, s.z) + 4,
         z: s.z,
-        strength: s.strength * 0.7,
+        strength: Math.min(1.3, s.strength * 1.05),
         smokeAcc: 0,
         flameAcc: 0,
         ttl: 0,

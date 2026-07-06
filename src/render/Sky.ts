@@ -34,12 +34,12 @@ const SUN_Y = Math.sin(SUN_ELEVATION);
 const SUN_Z = Math.cos(SUN_AZIMUTH) * Math.cos(SUN_ELEVATION);
 
 // Palette (linear-ish working values; tone mapping handles the rest).
-const ZENITH_R = 0.2;
-const ZENITH_G = 0.36;
-const ZENITH_B = 0.68;
-const HORIZON_R = 0.9;
-const HORIZON_G = 0.77;
-const HORIZON_B = 0.55;
+const ZENITH_R = 0.15;
+const ZENITH_G = 0.32;
+const ZENITH_B = 0.74;
+const HORIZON_R = 0.92;
+const HORIZON_G = 0.78;
+const HORIZON_B = 0.56;
 const PEACH_R = 1.0;
 const PEACH_G = 0.84;
 const PEACH_B = 0.62;
@@ -206,45 +206,51 @@ function makeCloudTexture(seed: number, variant: number): CanvasTexture {
 
 // ------------------------------------------------------------------- entry
 
+/**
+ * Billboard cumulus band (near-horizon) layered together with the raymarched
+ * VolumetricClouds deck (render/VolumetricClouds.ts) overhead — this combined
+ * cloudscape is the look validated in trees-check.png (user-preferred).
+ */
+const ENABLE_BILLBOARD_CLOUDS = true;
+
 export function buildSky(scene: Scene, seed: number): Group {
   const group = new Group();
   group.name = 'sky';
   group.add(buildDome(seed));
   group.add(buildSunSprite());
 
-  const rng = new Rng((seed ^ 0x51c7a3) >>> 0);
-  const textures = [0, 1, 2].map((v) => makeCloudTexture((seed ^ 0x9e3779) >>> 0, v));
-  const cloudGeo = new PlaneGeometry(1, 1);
-
-  const count = rng.int(10, 16);
-  for (let i = 0; i < count; i++) {
-    const az = rng.range(0, Math.PI * 2);
-    // elevation 3..14 degrees, biased toward the horizon — never overhead
-    const el = (3 + 11 * Math.pow(rng.float(), 1.7)) * (Math.PI / 180);
-    const dist = rng.range(1500, 3500);
-    const width = rng.range(300, 900);
-    const height = width * rng.range(0.3, 0.52);
-    const mat = new MeshBasicMaterial({
-      map: rng.pick(textures),
-      transparent: true,
-      depthWrite: false,
-      fog: false,
-      side: DoubleSide,
-      opacity: rng.range(0.5, 0.85),
-      color: new Color(1.0, rng.range(0.93, 0.99), rng.range(0.86, 0.96)),
-    });
-    const mesh = new Mesh(cloudGeo, mat);
-    mesh.position.set(
-      Math.sin(az) * Math.cos(el) * dist,
-      Math.sin(el) * dist,
-      Math.cos(az) * Math.cos(el) * dist,
-    );
-    // random mirror doubles apparent variety from three painted sprites
-    mesh.scale.set(rng.chance(0.5) ? -width : width, height, 1);
-    mesh.lookAt(0, 0, 0);
-    mesh.renderOrder = -98;
-    mesh.name = `sky-cloud-${i}`;
-    group.add(mesh);
+  if (ENABLE_BILLBOARD_CLOUDS) {
+    const rng = new Rng((seed ^ 0x51c7a3) >>> 0);
+    const textures = [0, 1, 2].map((v) => makeCloudTexture((seed ^ 0x9e3779) >>> 0, v));
+    const cloudGeo = new PlaneGeometry(1, 1);
+    const count = rng.int(10, 16);
+    for (let i = 0; i < count; i++) {
+      const az = rng.range(0, Math.PI * 2);
+      const el = (3 + 11 * Math.pow(rng.float(), 1.7)) * (Math.PI / 180);
+      const dist = rng.range(1500, 3500);
+      const width = rng.range(300, 900);
+      const height = width * rng.range(0.3, 0.52);
+      const mat = new MeshBasicMaterial({
+        map: rng.pick(textures),
+        transparent: true,
+        depthWrite: false,
+        fog: false,
+        side: DoubleSide,
+        opacity: rng.range(0.5, 0.85),
+        color: new Color(1.0, rng.range(0.93, 0.99), rng.range(0.86, 0.96)),
+      });
+      const mesh = new Mesh(cloudGeo, mat);
+      mesh.position.set(
+        Math.sin(az) * Math.cos(el) * dist,
+        Math.sin(el) * dist,
+        Math.cos(az) * Math.cos(el) * dist,
+      );
+      mesh.scale.set(rng.chance(0.5) ? -width : width, height, 1);
+      mesh.lookAt(0, 0, 0);
+      mesh.renderOrder = -98;
+      mesh.name = `sky-cloud-${i}`;
+      group.add(mesh);
+    }
   }
 
   scene.add(group);

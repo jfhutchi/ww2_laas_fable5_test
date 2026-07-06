@@ -9,6 +9,45 @@ Reference set:
 
 ---
 
+## Post-release iteration 4 — LAAS parity ports (closed)
+
+Bar restated by the user: as good or better than LAAS. Three parallel implementation agents ported from the LAAS source; orchestrated integration. Battery re-verified **15/15**; ~117 fps @1080p with the full chain.
+
+1. **Raymarched volumetric clouds** (`render/VolumetricClouds.ts`): baked perlin-worley 64³ base + 32³ worley detail + 256² weather coverage (all compute-baked once, seeded); 24-step march with 2 sun taps, dual-lobe HG phase + powder + Beer, static spatial dither, early-out, premultiplied composite over the hazed image with scene-depth clipping; drift shares the seed/wind formula with the 2D cloud-shadow field so the deck and its shadows move together. LAAS's signature sky is now in.
+2. **Fixed GTAO + shared half-res MRT pass** (`render/Gtao.ts`, `render/HalfResMrt.ts`): LAAS's two output-affecting GTAO fixes (same-texel rejection that stops far-grazing black crush on RTS vistas; NaN horizon clamp), normals from depth (normal MRT attachment dropped — smaller scene pass), joint-bilateral upsample with the wsum-gated fallback (no additive floor), sky ao=1. AO + cloud march share one half-res quad raster.
+3. **Vegetation wind** (Pillar F): grass/wheat blades bend by local-height² with two-frequency Lissajous sway; hedgerow crowns breathe; structured-tree sway via per-vertex flex attribute (agent port). All vertex-stage positionNode — shadows sway for free.
+4. **Hero trees** (`assets/FoliageGenerator.ts` rewrite): structured skeletons (trunk + primary/secondary branches + tip leaf clusters) replacing blob canopies, 3 archetypes × 4 species, flex attribute baked for wind.
+5. **CSM attempt — parked with findings**: stock CSMShadowNode produced no usable cascade maps under the PostProcessing scene-pass pipeline (init-order trap documented: `_init` only fires while `camera===null`; cascades still empty-rendered). LAAS needed its custom `CsmCached` + near/far fixes for the same environment. Reverted to the proven 4096 single-map (the long golden shadows in every hero shot); full CsmCached port remains on the ledger.
+
+---
+
+## Post-release iteration 3 — surface textures + village-plan rework (closed)
+
+User feedback: textures should approach the reference imagery; layout had walls/fences clipping roads and houses; the village should read like a real European settlement. Battery re-verified **15/15**.
+
+1. **Macro–meso–micro material law** (`render/MaterialDetail.ts`): all world materials swapped to `MeshStandardNodeMaterial` with pure-expression TSL detail multipliers layered over the existing vertex colors (NodeMaterial multiplies colorNode × vertexColor × instanceColor natively — verified in the study). Three shared frequency bands (≈9 m / 1.4 m / 0.2 m) kill flat reads and tiling, plus per-class structure: **masonry stone coursing** with mortar-line shadows and per-stone value steps, **per-tile roof variation**, plank grain on wood, gravel speckle on roads, clod texture on hedgerow berms, leaf sparkle on foliage — and micro-driven roughness variance so highlights stop reading plastic. Applied to buildings, barriers, terrain, roads, and ground cover.
+2. **Village plan rework** (`world/Layout.ts`): barriers are now emitted as short runs through `addBarrierRun`, which drops any piece crossing a road or clipping a building footprint (rotated-rect test) — walls end cleanly at obstacles instead of threading through houses; hedgerow field boundaries get the same building test. Civic ground added *before* housing so frontages address it: a **cobbled parvis** in front of the church (24 m paved plaza feeding the crossroads road) and a **town-square apron** at the junction itself. The well stands on the parvis; the churchyard wall keeps its road-facing gate.
+
+Follow-ups if desired: plaza furniture (market stalls/benches), wall gate posts at run ends, streak grime under eaves (needs per-building local frame), normal-map bands on masonry.
+
+---
+
+## Post-release iteration 2 — LAAS render-stack port (closed)
+
+Method: six parallel deep-read agents produced port plans from the LAAS benchmark source (file:line-referenced, THREE-NOTES-law-compliant); implemented in risk order with probe-driven debugging. Battery re-verified **15/15** after every stage.
+
+Landed this iteration:
+1. **TAA (TRAANode)** with analytic camera-reprojection velocity through the documented `velocityNode.load()` duck-type seam (stock velocity MRT is blind to displaced geometry); per-camera chains; history flush on tactical↔tank swap via `setSize(1,1)` restart; MSAA off on high/ultra (TAA replaces it and funds itself).
+2. **Analytic aerial perspective** replacing linear fog on high/ultra: per-channel Rayleigh/Mie extinction (blue extinguishes first), altitude-dependent boundary haze, sun-side warm in-scatter lobe. Explicit per-chain camera uniforms synced at render time (post nodes see the quad camera — LAAS trap). Found en route: TSL boolean `select()` produced garbage — float-mask `mix` is the robust form.
+3. **Drifting cloud shadows + crepuscular shafts**: deterministic CPU-baked coverage field (seeded fBm, mirrored wrap), sun-slant offset, wind drift from sim time (freeze-safe); ground darkening with an ambient floor plus in-scatter modulation at the ray midpoint — light shafts sweep the battlefield as banks drift.
+4. **Golden-hour color script**: pre-tonemap grade — warm white balance, teal shadows / orange highlights split toning, saturation, mid-gray-pivot filmic contrast (LAAS t=19 keyframe softened ~25% for ACES).
+5. **Image-based lighting**: procedural equirect sky radiance (warm sun lobe, blue zenith, luminous horizon, earthy ground bounce) as `scene.environment`; hemisphere reduced to a never-black floor.
+6. **Density**: wheat/hay stalk geometry planted in rows matching the painted striping (~40k instances near the action), quoin corner blocks on masonry, Norman timber framing on plaster facades, denser road-verge grass.
+
+Remaining ledger toward the full LAAS bar (plans in hand from the study agents): fixed-GTAO port (horizon-safe + bilateral upsample) with screen-space bounce, probe-GI field, full volumetric cloud march, CSM+PCSS+contact shadows, TSL macro-meso-micro material nodes, hierarchical wind. 
+
+---
+
 ## Post-release iteration 1 — user feedback pass (closed)
 
 Feedback: objective/roster panels overlapped; graphics too far below the benchmark. Fixes:

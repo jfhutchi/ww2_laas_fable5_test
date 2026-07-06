@@ -11,7 +11,9 @@ import {
   Scene,
   Vector3,
   OrthographicCamera,
+  type PerspectiveCamera,
 } from 'three';
+import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import type { GraphicsPreset } from '../app/Config.ts';
 
 export class Lighting {
@@ -19,8 +21,27 @@ export class Lighting {
   readonly hemi: HemisphereLight;
   /** Direction pointing FROM the sun TOWARD the scene (normalized). */
   readonly sunDir = new Vector3();
+  /** Cascaded shadow rig (high/ultra); null on low preset. */
+  private csm: CSMShadowNode | null = null;
 
   private shadowSpan = 180;
+
+  /** CSM fits itself to the ACTIVE view camera — call on mode switches. */
+  setShadowCamera(camera: PerspectiveCamera): void {
+    if (!this.csm) return;
+    const rig = this.csm as unknown as {
+      camera: PerspectiveCamera | null;
+      mainFrustum?: unknown;
+      updateFrustums?: () => void;
+    };
+    // CSMShadowNode._init only fires while camera === null (it self-assigns
+    // the first build camera) — pre-setting it would skip init entirely.
+    // Only refit for genuine camera SWAPS after the node is live.
+    if (!rig.mainFrustum) return;
+    rig.camera = camera;
+    camera.updateProjectionMatrix();
+    rig.updateFrustums?.();
+  }
 
   constructor(scene: Scene, preset: GraphicsPreset) {
     // Late afternoon: sun ~24 degrees above horizon, WSW.
@@ -30,10 +51,15 @@ export class Lighting {
       .set(-Math.sin(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.cos(azimuth) * Math.cos(elevation))
       .normalize();
 
-    this.sun = new DirectionalLight(new Color(1.0, 0.8, 0.58), 3.6);
+    this.sun = new DirectionalLight(new Color(1.0, 0.79, 0.54), 4.2);
     this.sun.position.copy(this.sunDir).multiplyScalar(-420);
     this.sun.castShadow = true;
-    const mapSize = preset === 'low' ? 2048 : preset === 'high' ? 4096 : 4096;
+
+    // Single camera-following map. (A 3-cascade CSMShadowNode port was
+    // attempted and produced no usable cascade maps under the PostProcessing
+    // scene-pass pipeline — LAAS needed a custom CsmCached + near/far fixes
+    // for the same reason. Parked; see docs/DELTA.md ledger.)
+    const mapSize = preset === 'low' ? 2048 : 4096;
     this.sun.shadow.mapSize.set(mapSize, mapSize);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.35;
@@ -45,11 +71,13 @@ export class Lighting {
     scene.add(this.sun.target);
 
     // Sky fill: cool blue sky, warm earthy ground bounce. Keeps shadow floors lifted.
-    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.8);
+    // Environment IBL (render/Environment.ts) carries most ambient now;
+    // the hemisphere is a low-level floor so nothing can ever crush black.
+    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.14);
     scene.add(this.hemi);
 
     // Counter-sun bounce fill so backlit hulls/figures keep their read.
-    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.5);
+    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.18);
     fill.position.copy(this.sunDir).multiplyScalar(360); // opposite the sun
     fill.castShadow = false;
     scene.add(fill);
@@ -69,6 +97,7 @@ export class Lighting {
 
   /** Keep the shadow frustum centred on what the camera looks at. */
   follow(focusX: number, focusZ: number): void {
+    if (this.csm) return; // CSM self-fits to the view camera
     // Snap to shadow-texel-sized increments to avoid crawling edges.
     const texel = (this.shadowSpan * 2) / this.sun.shadow.mapSize.x;
     const step = Math.max(texel * 8, 1);
