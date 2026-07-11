@@ -36,7 +36,7 @@ export class World {
     seed: number,
     preset: GraphicsPreset,
     onProgress: (f: number, msg: string) => void,
-    scene?: Scene,
+    _scene?: Scene,
   ): Promise<void> {
     const yield_ = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -80,9 +80,9 @@ export class World {
     this.group.add(buildFarField(this.model, this.ground, preset));
     await yield_();
 
-    if (scene) {
+    if (_scene) {
       onProgress(0.9, 'sky and clouds');
-      this.group.add(buildSky(scene, seed));
+      this.group.add(buildSky(_scene, seed));
       await yield_();
     }
 

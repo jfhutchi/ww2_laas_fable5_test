@@ -173,20 +173,14 @@ export function buildSherman(seed: number): VehicleRig {
   // bow MG ball
   hullParts.push(paint(new SphereGeometry(0.14, 8, 6).translate(L * 0.34, 1.28, -0.5), OLIVE_DK, rng));
   hullParts.push(cyl(0.045, 0.045, 0.5, 6, L * 0.52, 1.28, -0.5, TRACK, rng, { rotZ: Math.PI / 2 }));
-  // ---- field stowage & tools (reads strongly from the 3rd-person rear view)
-  // sandbag/log field armour lashed across the glacis
-  for (let i = 0; i < 5; i++) {
-    hullParts.push(cyl(0.12, 0.12, 0.32, 8, L * 0.33, 1.26, -0.62 + i * 0.31, new Color(0.33, 0.31, 0.25), rng, { rotZ: Math.PI / 2 }));
-  }
+  // ---- field stowage & tools (kept ON the deck silhouette — anything that
+  // pokes past the hull line reads as floating junk from the chase camera)
   // rear engine-deck jerrycans + crate + duffel
   for (let i = 0; i < 4; i++) {
-    hullParts.push(bx(0.22, 0.34, 0.16, -L * 0.38, 1.63, -0.55 + i * 0.33, JERRY, rng, { jitter: 0.008 }));
+    hullParts.push(bx(0.22, 0.28, 0.16, -L * 0.38, 1.6, -0.55 + i * 0.33, JERRY, rng, { jitter: 0.008 }));
   }
-  hullParts.push(bx(0.52, 0.32, 0.5, -L * 0.29, 1.6, 0.45, CRATE, rng, { jitter: 0.015 }));
-  hullParts.push(bx(0.6, 0.26, 0.36, -L * 0.42, 1.58, 0.42, CANVAS, rng, { jitter: 0.03, mottle: 0.14 }));
-  // rolled tarps along both fenders
-  hullParts.push(cyl(0.1, 0.1, 1.7, 8, -L * 0.02, 1.5, bodyW / 2 + 0.15, CANVAS, rng, { rotX: Math.PI / 2 }));
-  hullParts.push(cyl(0.09, 0.09, 1.3, 8, L * 0.1, 1.5, -(bodyW / 2 + 0.14), CANVAS, rng, { rotX: Math.PI / 2 }));
+  hullParts.push(bx(0.52, 0.26, 0.5, -L * 0.29, 1.57, 0.45, CRATE, rng, { jitter: 0.015 }));
+  hullParts.push(bx(0.6, 0.2, 0.36, -L * 0.42, 1.55, 0.42, CANVAS, rng, { jitter: 0.03, mottle: 0.14 }));
   // tools on the engine deck: shovel + axe (handle + head)
   hullParts.push(bx(0.72, 0.028, 0.055, -L * 0.16, 1.5, 0.34, TOOLWOOD, rng, {}));
   hullParts.push(bx(0.1, 0.02, 0.15, -L * 0.16 - 0.42, 1.5, 0.34, STEEL, rng, {}));

@@ -15,6 +15,7 @@ import {
 } from 'three';
 import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import type { GraphicsPreset } from '../app/Config.ts';
+import { SUN_AZIMUTH, SUN_ELEVATION } from '../world/WorldConst.ts';
 
 export class Lighting {
   readonly sun: DirectionalLight;
@@ -44,9 +45,10 @@ export class Lighting {
   }
 
   constructor(scene: Scene, preset: GraphicsPreset) {
-    // Late afternoon: sun ~24 degrees above horizon, WSW.
-    const azimuth = 2.35; // radians from +Z
-    const elevation = 0.42;
+    // Golden hour, WSW — MUST match WorldConst so shadows agree with the
+    // HDRI sky, cloud shadows and the post stack's sun lobe.
+    const azimuth = SUN_AZIMUTH;
+    const elevation = SUN_ELEVATION;
     this.sunDir
       .set(-Math.sin(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.cos(azimuth) * Math.cos(elevation))
       .normalize();
@@ -73,11 +75,11 @@ export class Lighting {
     // Sky fill: cool blue sky, warm earthy ground bounce. Keeps shadow floors lifted.
     // Environment IBL (render/Environment.ts) carries most ambient now;
     // the hemisphere is a low-level floor so nothing can ever crush black.
-    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.14);
+    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.2);
     scene.add(this.hemi);
 
     // Counter-sun bounce fill so backlit hulls/figures keep their read.
-    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.18);
+    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.28);
     fill.position.copy(this.sunDir).multiplyScalar(360); // opposite the sun
     fill.castShadow = false;
     scene.add(fill);

@@ -49,12 +49,16 @@ export class Ground implements GroundSampler {
   /** Terrain before roads/craters — also used to profile road elevations. */
   baseHeight(x: number, z: number): number {
     const s = this.seed;
-    let h = (fbm2D(x * 0.0016, z * 0.0016, s ^ 0x51, 4) - 0.5) * 11;
-    h += (fbm2D(x * 0.007, z * 0.007, s ^ 0x52, 3) - 0.5) * 2.6;
-    h += (fbm2D(x * 0.045, z * 0.045, s ^ 0x53, 2) - 0.5) * 0.55;
-    // village sits on a gentle plateau: flatten relief toward the center
+    // Real Normandy roll: the old amplitudes (11/2.6/0.55, then 72%
+    // flattened near the village) rendered as a billiard table.
+    let h = (fbm2D(x * 0.0016, z * 0.0016, s ^ 0x51, 4) - 0.5) * 16;
+    h += (fbm2D(x * 0.007, z * 0.007, s ^ 0x52, 3) - 0.5) * 5.2;
+    h += (fbm2D(x * 0.045, z * 0.045, s ^ 0x53, 2) - 0.5) * 1.1;
+    // near-camera micro-undulation (≈15 m wavelength, ±15 cm)
+    h += (fbm2D(x * 0.065, z * 0.065, s ^ 0x54, 2) - 0.5) * 0.3;
+    // village still favors a plateau, but keeps visible undulation
     const r = Math.hypot(x, z);
-    const flat = 1 - 0.72 * (1 - smoothstep(VILLAGE_RADIUS * 0.5, VILLAGE_RADIUS * 1.6, r));
+    const flat = 1 - 0.55 * (1 - smoothstep(VILLAGE_RADIUS * 0.35, VILLAGE_RADIUS * 1.3, r));
     return h * flat;
   }
 
@@ -68,6 +72,11 @@ export class Ground implements GroundSampler {
       const featherEnd = rc.width * 0.5 + 4.5;
       const t = 1 - smoothstep(featherStart, featherEnd, rc.dist);
       if (t > 0) h = lerp(h, rc.roadY, t * 0.92);
+      // drainage ditch along the shoulder — reads instantly as a real road
+      const ditch =
+        smoothstep(rc.width * 0.5 + 0.6, rc.width * 0.5 + 1.8, rc.dist) *
+        (1 - smoothstep(rc.width * 0.5 + 1.8, rc.width * 0.5 + 3.6, rc.dist));
+      h -= ditch * 0.38;
     }
 
     // crater bowls

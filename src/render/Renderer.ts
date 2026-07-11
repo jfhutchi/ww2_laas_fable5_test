@@ -32,7 +32,7 @@ export class Renderer {
       forceWebGL: false,
     });
     this.three.toneMapping = ACESFilmicToneMapping;
-    this.three.toneMappingExposure = 0.98; // the reference frames sit dusk-dark
+    this.three.toneMappingExposure = 1.08; // rebalance for the low golden-hour sun
     this.three.outputColorSpace = SRGBColorSpace;
     this.three.shadowMap.enabled = true;
     this.three.shadowMap.type = PCFSoftShadowMap;

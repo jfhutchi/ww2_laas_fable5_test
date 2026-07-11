@@ -121,6 +121,10 @@ export class App {
       this.scene.fog = new Fog(new Color(0.79, 0.73, 0.63), 720, 4000);
     }
     this.lighting = new Lighting(this.scene, config.preset);
+    // Painted golden-hour IBL + procedural dome. A photographic-HDRI sky
+    // (@pmndrs/assets EXRs) was trialed and rejected: the npm-embeddable CC0
+    // equirects are 1k (blurry as backgrounds) and none match a Normandy
+    // golden hour (venice_sunset = urban skyline, kiara_1_dawn = pink veld).
     buildEnvironment(this.scene, 0.5);
 
     reportProgress(hooks, 0.2, 'generating world');
