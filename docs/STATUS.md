@@ -32,6 +32,12 @@ Battery proves: WebGPU init (no fallback) · deterministic seed (content-hash eq
 
 Performance (high preset, RTX-class, 1080p headless): ~5.5–9.1 M tris, 130–190 draws, 98–120 fps.
 
+## Post-release iteration 5 (reference-similarity pass)
+
+Closed on a CPU-only rig (WebGPU over SwiftShader, headed Xvfb) — see DELTA.md for the full ledger. Highlights: two real WebGPU spec violations fixed (r16float storage 3D textures + late instanceColor) that blacked out frames / whitened smoke off desktop-Dawn; `?cam=` framing actually applied (it never was — camera API added); terrain/roads moved onto the shared detail-material law; palette truthing vs `references/` (olive meadow with worn patches, weathered roofs, darker olive drab, muted grade); human-proportioned infantry; taller lit war smoke; volumetric deck restored via CPU-baked 2D slice atlases.
+
+Performance note: this container renders ~4–5 fps at 1080p (software rasterizer, 4 cores) — the RTX-class numbers above still describe real-GPU behavior.
+
 ## Open blockers
 
 None — see [BLOCKERS.md](BLOCKERS.md).
