@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     if (window.__oc.settle) await window.__oc.settle(f);
   }, settleFrames);
   mkdirSync(dirname(out), { recursive: true });
-  await page.screenshot({ path: out });
+  await page.screenshot({ path: out, timeout: 180000 });
   const stats = await page.evaluate(() => JSON.stringify(window.__oc.stats));
   console.log(`[hero] wrote ${out}`);
   console.log(`[hero:stats] ${stats}`);

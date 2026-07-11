@@ -90,7 +90,7 @@ export async function capture(page: Page, spec: ShotSpec, timeoutMs = 240000): P
   }, spec.settleFrames ?? 24);
 
   mkdirSync(dirname(spec.out), { recursive: true });
-  await page.screenshot({ path: spec.out });
+  await page.screenshot({ path: spec.out, timeout: 180000 });
   const stats = await page.evaluate(() => JSON.stringify(window.__oc.stats));
   console.log(`[shoot] wrote ${spec.out}`);
   return stats;
@@ -127,10 +127,20 @@ async function main(): Promise<void> {
     if (preset) spec.url.preset = preset;
     const run = str(args['run']);
     if (run) spec.runSimSeconds = Number(run);
+    // --extra "k=v,k2=v2" → arbitrary URL params (debug toggles like noclouds=1)
+    const extra = str(args['extra']);
+    if (extra) {
+      spec.url.extra = Object.fromEntries(
+        extra.split(',').map((kv) => {
+          const [k, v] = kv.split('=');
+          return [k ?? '', v ?? '1'];
+        }),
+      );
+    }
     specs.push(spec);
   } else {
     // default battery of framing shots — tactical frames the village crossroads
-    const villageCam = '18,110,74,-2.98,0.99,45';
+    const villageCam = '23,120,108,-0.18,0.88,45';
     specs.push(
       {
         name: 'tactical',

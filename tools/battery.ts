@@ -105,7 +105,7 @@ const checks: Check[] = [
       await bootTo(page, { mode: 'tactical', freeze: true });
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
       mkdirSync('shots/battery', { recursive: true });
-      await page.screenshot({ path: 'shots/battery/tactical.png' });
+      await page.screenshot({ path: 'shots/battery/tactical.png', timeout: 180000 });
     },
   },
   {
@@ -114,7 +114,7 @@ const checks: Check[] = [
     fn: async ({ page }) => {
       await bootTo(page, { mode: 'tank', freeze: true });
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
-      await page.screenshot({ path: 'shots/battery/tank.png' });
+      await page.screenshot({ path: 'shots/battery/tank.png', timeout: 180000 });
     },
   },
   {
@@ -128,7 +128,7 @@ const checks: Check[] = [
       assert(/draws \d+/.test(hudText), 'debug HUD draw calls missing');
       const s = await stats(page);
       assert(s.render.drawCalls > 0 && s.render.triangles > 0, 'debug HUD counters not real');
-      await page.screenshot({ path: 'shots/battery/debug_hud.png' });
+      await page.screenshot({ path: 'shots/battery/debug_hud.png', timeout: 180000 });
     },
   },
   {

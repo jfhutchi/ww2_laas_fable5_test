@@ -290,7 +290,14 @@ export class App {
     );
 
     // camera opens on the player force (unless an explicit ?cam pose was given)
-    if (!this.config.cam) this.tacticalCam.focusOn(spawnMid(gs).x, spawnMid(gs).z, 130);
+    if (this.config.cam) {
+      this.tacticalCam.setPose(this.config.cam);
+      // harness framing: hold the requested pose against input drift
+      // (headless pointers park at the viewport edge and would edge-pan)
+      if (this.config.freeze) this.tacticalCam.enabled = false;
+    } else {
+      this.tacticalCam.focusOn(spawnMid(gs).x, spawnMid(gs).z, 130);
+    }
 
     this.menu.hide();
     this.setMode('tactical');
@@ -667,6 +674,30 @@ export class App {
       startMission: () =>
         this.startMission({ seed: this.config.seed, difficulty: this.config.difficulty, preset: this.config.preset }),
       objective: () => ({ x: gs.model.captureZone.x, z: gs.model.captureZone.z }),
+      getCameraPose: () => this.tacticalCam.getPose(),
+      setCameraPose: (pose) => {
+        this.tacticalCam.enabled = false; // scripted framing — hold the pose
+        this.tacticalCam.setPose(pose);
+      },
+      debugScene: () => {
+        if (!this.config.debug) return [];
+        const out: { name: string; kind: string; visible: boolean; count: number; tris: number }[] = [];
+        for (const child of this.world.group.children) {
+          let tris = 0;
+          let count = 0;
+          child.traverse((o) => {
+            const mesh = o as { isMesh?: boolean; isInstancedMesh?: boolean; count?: number; geometry?: { index: { count: number } | null; attributes: { position?: { count: number } } } };
+            if (mesh.isMesh && mesh.geometry) {
+              count++;
+              const idx = mesh.geometry.index;
+              const per = (idx ? idx.count : (mesh.geometry.attributes.position?.count ?? 0)) / 3;
+              tris += per * (mesh.isInstancedMesh ? (mesh.count ?? 1) : 1);
+            }
+          });
+          out.push({ name: child.name || '(unnamed)', kind: child.type, visible: child.visible, count, tris: Math.round(tris) });
+        }
+        return out;
+      },
       units: (side) =>
         gs.units
           .filter((u) => u.side === side && u.alive)

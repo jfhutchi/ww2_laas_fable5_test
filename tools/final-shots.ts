@@ -31,7 +31,7 @@ async function settle(page: Page, frames: number): Promise<void> {
 
 async function shot(page: Page, path: string): Promise<void> {
   await settle(page, 20);
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 180000 });
   console.log(`[final] wrote ${path}`);
 }
 
