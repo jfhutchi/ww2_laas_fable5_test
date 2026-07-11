@@ -9,16 +9,14 @@ import {
   BufferAttribute,
   BufferGeometry,
   Group,
-  IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
   Quaternion,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng, hash2D } from '../core/Random.ts';
 import { clamp01 } from '../core/MathUtil.ts';
-import { detailedMaterial } from '../render/MaterialDetail.ts';
+import { detailedMaterial, leafCardMaterial } from '../render/MaterialDetail.ts';
 import { attribute, positionLocal, sin, time, vec3 as tslVec3 } from 'three/tsl';
 // TSL @types are narrower than runtime — loose bridges for vec construction
 const v3 = tslVec3 as unknown as (x: unknown, y: unknown, z: unknown) => typeof positionLocal;
@@ -48,7 +46,9 @@ const MAT_GRASS = detailedMaterial('grass', { roughness: 0.95, doubleSide: true 
 }
 const MAT_STONE = detailedMaterial('stone', { roughness: 0.98 });
 
-const MAT_SHRUB = detailedMaterial('foliage', { roughness: 0.9, doubleSide: true });
+// roadside bushes share the photo leaf-card vocabulary of trees/hedges —
+// solid icosphere blobs read as topiary beside them
+const MAT_SHRUB = leafCardMaterial('bush');
 {
   // whole-bush sway: gentler than grass, driven by the same gust field
   const rawY = attr3('position').y;
@@ -115,34 +115,74 @@ function grassClump(rng: Rng): BufferGeometry {
   return g;
 }
 
-/** Leafy bush: overlapping squashed icosphere blobs, dark base → lit crown. */
+/** Leafy bush: alpha-tested photo leaf cards, dark base → lit crown. */
 function shrubGeo(rng: Rng, big: boolean): BufferGeometry {
-  const parts: BufferGeometry[] = [];
-  const nBlobs = rng.int(3, 6);
   const scale = big ? rng.range(1.1, 1.7) : rng.range(0.7, 1.05);
-  for (let b = 0; b < nBlobs; b++) {
-    const r = rng.range(0.4, 0.72) * scale;
-    const ico = new IcosahedronGeometry(r, 1);
-    ico.scale(1, rng.range(0.7, 0.95), 1);
-    ico.translate(rng.range(-0.45, 0.45) * scale, rng.range(0.4, 0.9) * scale, rng.range(-0.45, 0.45) * scale);
-    parts.push(ico.toNonIndexed());
-    ico.dispose();
-  }
-  const merged = mergeGeometries(parts, false) ?? new BufferGeometry();
-  for (const p of parts) p.dispose();
-  const pos = merged.getAttribute('position');
-  const colors = new Float32Array(pos.count * 3);
+  const nCards = rng.int(7, 10);
+  const posArr = new Float32Array(nCards * 4 * 3);
+  const nrmArr = new Float32Array(nCards * 4 * 3);
+  const colArr = new Float32Array(nCards * 4 * 3);
+  const uvArr = new Float32Array(nCards * 4 * 2);
+  const idx: number[] = [];
+  const dir = new Vector3();
+  const t1 = new Vector3();
+  const t2 = new Vector3();
+  const e1 = new Vector3();
+  const e2 = new Vector3();
+  const ctr = new Vector3();
+  const v = new Vector3();
+  const yAxis = new Vector3(0, 1, 0);
+  const xAxis = new Vector3(1, 0, 0);
   const topY = 1.35 * scale;
-  for (let i = 0; i < pos.count; i++) {
-    const t = clamp01(pos.getY(i) / topY);
-    const mott = 0.82 + hash2D(Math.round(pos.getX(i) * 20), Math.round(pos.getZ(i) * 20), 0x5b) * 0.36;
-    colors[i * 3] = (0.14 + 0.16 * t) * mott;
-    colors[i * 3 + 1] = (0.22 + 0.22 * t) * mott;
-    colors[i * 3 + 2] = (0.09 + 0.09 * t) * mott;
+  for (let c = 0; c < nCards; c++) {
+    const cosT = 2 * rng.float() - 1;
+    const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
+    const phi = rng.range(0, Math.PI * 2);
+    dir.set(sinT * Math.cos(phi), cosT, sinT * Math.sin(phi));
+    ctr.copy(dir).multiplyScalar((0.3 + 0.45 * Math.sqrt(rng.float())) * scale);
+    ctr.y = ctr.y * 0.65 + 0.62 * scale;
+    const ref = Math.abs(dir.y) < 0.94 ? yAxis : xAxis;
+    t1.crossVectors(ref, dir).normalize();
+    t2.crossVectors(dir, t1);
+    const roll = rng.range(0, Math.PI * 2);
+    e1.copy(t1).multiplyScalar(Math.cos(roll)).addScaledVector(t2, Math.sin(roll));
+    e2.crossVectors(dir, e1);
+    e2.addScaledVector(dir, rng.range(-0.35, 0.35)).normalize();
+    const half = rng.range(0.4, 0.6) * scale;
+    const t = clamp01(ctr.y / topY);
+    const mott = 0.82 + rng.float() * 0.36;
+    const cr = (0.14 + 0.16 * t) * mott * 2.4;
+    const cg = (0.22 + 0.22 * t) * mott * 2.4;
+    const cb = (0.09 + 0.09 * t) * mott * 2.4;
+    const u0 = rng.chance(0.5) ? 0 : 1;
+    const v0 = rng.chance(0.5) ? 0 : 1;
+    const base = c * 4;
+    for (let k = 0; k < 4; k++) {
+      const sx = k === 0 || k === 3 ? -1 : 1;
+      const sy = k < 2 ? -1 : 1;
+      v.copy(ctr).addScaledVector(e1, sx * half).addScaledVector(e2, sy * half);
+      const vi = base + k;
+      posArr[vi * 3] = v.x;
+      posArr[vi * 3 + 1] = v.y;
+      posArr[vi * 3 + 2] = v.z;
+      nrmArr[vi * 3] = dir.x;
+      nrmArr[vi * 3 + 1] = dir.y;
+      nrmArr[vi * 3 + 2] = dir.z;
+      colArr[vi * 3] = cr;
+      colArr[vi * 3 + 1] = cg;
+      colArr[vi * 3 + 2] = cb;
+      uvArr[vi * 2] = sx < 0 ? u0 : 1 - u0;
+      uvArr[vi * 2 + 1] = sy < 0 ? v0 : 1 - v0;
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
-  merged.setAttribute('color', new BufferAttribute(colors, 3));
-  merged.computeVertexNormals();
-  return merged;
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(posArr, 3));
+  geo.setAttribute('normal', new BufferAttribute(nrmArr, 3));
+  geo.setAttribute('color', new BufferAttribute(colArr, 3));
+  geo.setAttribute('uv', new BufferAttribute(uvArr, 2));
+  geo.setIndex(idx);
+  return geo;
 }
 
 const FLOWER_COLORS: readonly (readonly [number, number, number])[] = [

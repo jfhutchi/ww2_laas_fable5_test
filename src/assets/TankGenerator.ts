@@ -42,10 +42,16 @@ const JERRY = new Color(0.24, 0.28, 0.18);
 const STEEL = new Color(0.13, 0.13, 0.14);
 const TOOLWOOD = new Color(0.31, 0.22, 0.14);
 
-// cast-armor micro detail + matte paint — bare StandardMaterial at 0.74
-// roughness read as plastic toy shells in the hero third-person frame
-const MAT_BODY = detailedMaterial('metal', { roughness: 0.86, metalness: 0.06 });
-const MAT_TRACK = detailedMaterial('metal', { roughness: 0.97, metalness: 0.1 });
+// Photo-PBR armor (Metal005 pitted cast steel, LOCAL-space so paint never
+// swims while driving) with dust building up from the local ground plane.
+// Hull and turret split so the dust gradient reads right on each: the
+// turret sits ~1.5 m up and only its skirt catches dust.
+const MAT_BODY = detailedMaterial('armor', { roughness: 0.84, metalness: 0.08, dust: 0.6, dustHeight: 1.45 });
+const MAT_TURRET = detailedMaterial('armor', { roughness: 0.84, metalness: 0.08, dust: 0.22, dustHeight: 0.55 });
+// gun meshes sit at local y≈0 inside their own pivot Group — the local-Y
+// dust gradient would read them as ground-level and cake the barrel
+const MAT_GUN = detailedMaterial('armor', { roughness: 0.84, metalness: 0.08 });
+const MAT_TRACK = detailedMaterial('tracks', { roughness: 0.95, metalness: 0.12, dust: 0.85, dustHeight: 1.0 });
 
 function paint(g: BufferGeometry, base: Color, rng: Rng, mottle = 0.07, jitter = 0): BufferGeometry {
   const pos = g.attributes['position'];
@@ -190,9 +196,9 @@ export function buildSherman(seed: number): VehicleRig {
   for (const sgn of [0.42, -0.42]) {
     hullParts.push(cyl(0.08, 0.08, 0.09, 12, L * 0.44, 1.44, sgn, new Color(0.55, 0.55, 0.5), rng, { rotZ: Math.PI / 2 }));
   }
-  // hull star
-  starPlate(hullParts, 0.34, 0, 1.13, W / 2 + 0.011, 0, rng);
-  starPlate(hullParts, 0.34, 0, 1.13, -(W / 2 + 0.011), Math.PI, rng);
+  // hull star — flush against the upper-hull side plates
+  starPlate(hullParts, 0.34, 0, 1.13, (W - 0.1) / 2 + 0.011, 0, rng);
+  starPlate(hullParts, 0.34, 0, 1.13, -((W - 0.1) / 2 + 0.011), Math.PI, rng);
 
   group.add(meshOf(trackParts, MAT_TRACK));
   group.add(meshOf(hullParts, MAT_BODY));
@@ -252,7 +258,7 @@ export function buildSherman(seed: number): VehicleRig {
       turretParts.push(s);
     }
   }
-  turret.add(meshOf(turretParts, MAT_BODY));
+  turret.add(meshOf(turretParts, MAT_TURRET));
 
   // ---- gun: pivot at mantlet
   const gun = new Group();
@@ -261,7 +267,7 @@ export function buildSherman(seed: number): VehicleRig {
   gunParts.push(cyl(0.075, 0.095, 2.3, 20, 1.15, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
   // muzzle / gun collar for a beefier barrel read
   gunParts.push(cyl(0.11, 0.11, 0.22, 16, 2.28, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
-  gun.add(meshOf(gunParts, MAT_BODY));
+  gun.add(meshOf(gunParts, MAT_GUN));
   turret.add(gun);
   group.add(turret);
 
@@ -307,7 +313,7 @@ export function buildStuG(seed: number): VehicleRig {
   gunParts.push(bx(0.4, 0.34, 0.44, 0.1, 0, 0, GRAY_DK, rng, { jitter: 0.01 })); // mantlet block
   gunParts.push(cyl(0.06, 0.08, 2.6, 10, 1.4, 0, 0, GRAY_DE, rng, { rotZ: Math.PI / 2 }));
   gunParts.push(cyl(0.1, 0.1, 0.3, 8, 2.65, 0, 0, GRAY_DK, rng, { rotZ: Math.PI / 2 })); // muzzle brake
-  gun.add(meshOf(gunParts, MAT_BODY));
+  gun.add(meshOf(gunParts, MAT_GUN));
   turret.add(gun);
   group.add(turret);
 
@@ -347,14 +353,14 @@ export function buildPanzer4(seed: number): VehicleRig {
   tParts.push(bx(1.3, 0.16, 1.5, 0, 0.62, 0, GRAY_DK, rng, {}));
   tParts.push(cyl(0.3, 0.32, 0.28, 10, -0.55, 0.68, 0, GRAY_DK, rng, {}));
   tParts.push(bx(0.36, 0.42, 0.7, 0.85, 0.24, 0, GRAY_DK, rng, {})); // mantlet
-  turret.add(meshOf(tParts, MAT_BODY));
+  turret.add(meshOf(tParts, MAT_TURRET));
 
   const gun = new Group();
   gun.position.set(0.85, 0.24, 0);
   const gParts: BufferGeometry[] = [];
   gParts.push(cyl(0.055, 0.075, 2.9, 10, 1.45, 0, 0, GRAY_DE, rng, { rotZ: Math.PI / 2 }));
   gParts.push(cyl(0.095, 0.095, 0.26, 8, 2.92, 0, 0, GRAY_DK, rng, { rotZ: Math.PI / 2 }));
-  gun.add(meshOf(gParts, MAT_BODY));
+  gun.add(meshOf(gParts, MAT_GUN));
   turret.add(gun);
   group.add(turret);
 

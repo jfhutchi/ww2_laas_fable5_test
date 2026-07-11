@@ -21,8 +21,22 @@ renderer consumes are committed per asset (`_Color`, `_Roughness`, `_Displacemen
 | RoofingTiles012A | Terracotta roofs | https://ambientcg.com/view?id=RoofingTiles012A | CC0 |
 | RoofingTiles013A | Slate roofs (barns, sheds, church) | https://ambientcg.com/view?id=RoofingTiles013A | CC0 |
 | Bark012 | Tree trunks | https://ambientcg.com/view?id=Bark012 | CC0 |
+| Metal005 | Tank armor (pitted cast steel, hull/turret) | https://ambientcg.com/view?id=Metal005 | CC0 |
+| Metal038 | Tank tracks (scuffed dark steel) | https://ambientcg.com/view?id=Metal038 | CC0 |
+| Fabric066 | Infantry uniforms, canvas stowage, sandbags | https://ambientcg.com/view?id=Fabric066 | CC0 |
+| LeafSet016 | Oak canopy cards (Color + Opacity) | https://ambientcg.com/view?id=LeafSet016 | CC0 |
+| LeafSet004 | Poplar canopy cards | https://ambientcg.com/view?id=LeafSet004 | CC0 |
+| LeafSet023 | Apple/orchard canopy cards | https://ambientcg.com/view?id=LeafSet023 | CC0 |
+| LeafSet014 | Hedgerow/bush canopy cards | https://ambientcg.com/view?id=LeafSet014 | CC0 |
 
 Notes:
+
+- The committed LeafSet `_Color` maps are **modified** from the originals
+  (CC0 permits this): the white scan background is flood-filled with each
+  set's mean leaf colour so alpha-test edges don't fringe white and distant
+  mipmaps blend toward foliage green instead of thinning out. Originals are
+  at the source URLs; the fill script logic lives in the iteration-7 notes
+  in DELTA.md.
 
 - The brief named `Plaster017`, `RoofingTiles012` and `RoofingTiles013`; those
   exact IDs do not exist on ambientCG (`get?file=` returns "download not

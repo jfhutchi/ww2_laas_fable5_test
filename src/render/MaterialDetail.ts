@@ -31,6 +31,7 @@ import { MeshStandardNodeMaterial } from 'three/webgpu';
 import {
   Fn,
   abs,
+  attribute,
   cameraViewMatrix,
   clamp,
   dot,
@@ -45,6 +46,7 @@ import {
   sin,
   smoothstep,
   texture as tslTexture,
+  transformNormalToView,
   vec2,
   vec3,
   vec4,
@@ -90,12 +92,19 @@ export type DetailKind =
   | 'soil'
   | 'foliage'
   | 'grass'
-  | 'metal';
+  | 'metal'
+  | 'armor'
+  | 'tracks'
+  | 'cloth';
 
 export interface DetailOptions {
   roughness: number;
   metalness?: number;
   doubleSide?: boolean;
+  /** Dust/mud accumulation strength (vehicle kinds), 0..1. */
+  dust?: number;
+  /** Local-space height (m) where dust has fully faded out. */
+  dustHeight?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +140,11 @@ const SETS = {
   terra: { asset: 'RoofingTiles012A', tile: 1.8, norm: [2.62, 8.48, 16.11], satKeep: 0.55, strength: 0.95, roughMean: 0.619, roughInfluence: 0.5, dispAmp: 0.022 },
   slate: { asset: 'RoofingTiles013A', tile: 1.8, norm: [31.75, 32.97, 27.47], satKeep: 0.6, strength: 0.85, roughMean: 0.5, roughInfluence: 0.4, dispAmp: 0.018 },
   bark: { asset: 'Bark012', tile: 1.6, norm: [3.8, 4.94, 11.1], satKeep: 0.8, strength: 1, roughMean: 0.674, roughInfluence: 0.4, dispAmp: 0.02 },
+  // vehicle/figure kinds — sampled in LOCAL space so paint never swims as
+  // the mesh drives around; relief output goes through transformNormalToView
+  armor: { asset: 'Metal005', tile: 1.9, norm: [5.01, 5.28, 5.29], satKeep: 0.5, strength: 0.78, roughMean: 0.377, roughInfluence: 0.35, dispAmp: 0.008 },
+  tracks: { asset: 'Metal038', tile: 1.1, norm: [8.57, 8.27, 8.21], satKeep: 0.5, strength: 0.9, roughMean: 0.366, roughInfluence: 0.3, dispAmp: 0 },
+  cloth: { asset: 'Fabric066', tile: 0.55, norm: [3.9, 4.14, 5.18], satKeep: 0.6, strength: 0.9, roughMean: 0.818, roughInfluence: 0.4, dispAmp: 0 },
 } satisfies Record<string, PbrSet>;
 
 type MapKind = 'Color' | 'Roughness' | 'Displacement';
@@ -156,6 +170,13 @@ function mapTex(set: PbrSet, map: MapKind): Texture {
 type TexSample = { rgb: N3; r: NF };
 const texAt = (t: Texture, uv: N2): TexSample =>
   (tslTexture as unknown as (tx: Texture, uv: N2) => TexSample)(t, uv);
+
+// RAW geometry attributes: positionLocal/normalLocal are instance-transformed
+// in this node setup (see GroundCover wind comment), which would make photo
+// paint swim on moving InstancedMesh soldiers. Vehicle meshes are plain
+// Meshes, where these equal positionLocal/normalLocal anyway.
+const attrPos = (): N3 => (attribute as unknown as (n: string, t: string) => N3)('position', 'vec3');
+const attrNrm = (): N3 => (attribute as unknown as (n: string, t: string) => N3)('normal', 'vec3');
 const mat4mulV4 = (m: typeof cameraViewMatrix, v: ReturnType<typeof vec4>): ReturnType<typeof vec4> =>
   (m as unknown as { mul: (v: ReturnType<typeof vec4>) => ReturnType<typeof vec4> }).mul(v);
 
@@ -168,10 +189,11 @@ interface TriWeights {
   wz: NF;
 }
 
-/** |normalWorld|⁸ blend weights — sharp enough that most fragments are
- *  effectively single-plane, so photo patterns stay crisp. */
-function triWeights(): TriWeights {
-  const nA = abs(normalWorld.xyz) as unknown as N3;
+/** |normal|⁸ blend weights — sharp enough that most fragments are
+ *  effectively single-plane, so photo patterns stay crisp. Local kinds
+ *  weight by normalLocal so the projection sticks to the moving mesh. */
+function triWeights(local: boolean): TriWeights {
+  const nA = abs((local ? attrNrm() : (normalWorld.xyz as unknown as N3)) as unknown as N3) as unknown as N3;
   const n2 = nA.mul(nA);
   const n4 = n2.mul(n2);
   const n8 = n4.mul(n4);
@@ -224,7 +246,15 @@ const PROC_AMP: Record<DetailKind, number> = {
   grass: 0,
   foliage: 0,
   metal: 0.0025,
+  armor: 0.004,
+  tracks: 0.006,
+  cloth: 0,
 };
+
+/** Kinds whose height field includes a photo displacement map. */
+const HAS_DISP: ReadonlySet<DetailKind> = new Set<DetailKind>([
+  'terrain', 'soil', 'road', 'masonry', 'roof', 'stone', 'bark', 'armor',
+]);
 
 /** Finite-difference step (m) — under the 1K texel size at our tile scales. */
 const EPS = 0.0035;
@@ -238,9 +268,14 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
   if (opts.doubleSide) mat.side = DoubleSide;
 
   const isGroundKind = kind === 'terrain' || kind === 'road' || kind === 'soil' || kind === 'grass';
+  // vehicle/figure kinds sample in LOCAL space (mesh drives around the world)
+  const isLocalKind = kind === 'armor' || kind === 'tracks' || kind === 'cloth';
   const hasPhoto =
     kind === 'terrain' || kind === 'road' || kind === 'masonry' || kind === 'roof' ||
-    kind === 'stone' || kind === 'soil' || kind === 'grass' || kind === 'bark';
+    kind === 'stone' || kind === 'soil' || kind === 'grass' || kind === 'bark' ||
+    isLocalKind;
+  const dustAmt = opts.dust ?? 0;
+  const dustH = opts.dustHeight ?? 1.2;
 
   // ---- surface-class masks recovered from the painted vertex color --------
   // (merged meshes carry several classes; the paint encodes which is which)
@@ -255,7 +290,7 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
   const soilMask = smoothstep(0.01, 0.06, vc.r.sub(vc.g)) as unknown as NF; // worn/crop ground vs meadow
 
   const detail = Fn(() => {
-    const wp = positionWorld;
+    const wp = isLocalKind ? attrPos() : (positionWorld as unknown as N3);
     const ground = vec2(wp.x, wp.z);
     // wall-friendly plane: horizontal position folded with height so vertical
     // surfaces vary along BOTH axes regardless of orientation
@@ -307,6 +342,11 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
     } else if (kind === 'foliage' || kind === 'grass') {
       const leaf = vnoise((kind === 'grass' ? ground : wall).div(0.5) as unknown as N2);
       k = k.mul(leaf.sub(0.5).mul(0.18).add(1)) as unknown as NF;
+    } else if (kind === 'tracks') {
+      // grouser bars across the track run (local X is the run direction)
+      const t = fract(wp.x.div(0.145));
+      const bar = smoothstep(0.1, 0.2, t).mul(smoothstep(0.6, 0.5, t));
+      k = k.mul(bar.mul(0.16).add(0.92)) as unknown as NF;
     }
 
     // ---- photo albedo layer (normalized multiplier ~1.0 mean) -------------
@@ -329,34 +369,44 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
       const sett = albedoMul(SETS.setts, texAt(mapTex(SETS.setts, 'Color'), uvGround(wpv, SETS.setts.tile)).rgb);
       photo = mix(mix(dirt, grav, gravelMask), sett, cobbleMask) as unknown as N3;
     } else if (kind === 'masonry') {
-      const w = triWeights();
+      const w = triWeights(false);
       const pl = albedoMul(SETS.plaster, triRgb(mapTex(SETS.plaster, 'Color'), wpv, SETS.plaster.tile, w));
       const br = albedoMul(SETS.brick, triRgb(mapTex(SETS.brick, 'Color'), wpv, SETS.brick.tile, w));
       photo = mix(pl, br, brickMask) as unknown as N3;
     } else if (kind === 'roof') {
-      const w = triWeights();
+      const w = triWeights(false);
       const sl = albedoMul(SETS.slate, triRgb(mapTex(SETS.slate, 'Color'), wpv, SETS.slate.tile, w));
       const te = albedoMul(SETS.terra, triRgb(mapTex(SETS.terra, 'Color'), wpv, SETS.terra.tile, w));
       photo = mix(sl, te, terraMask) as unknown as N3;
     } else if (kind === 'stone') {
-      const w = triWeights();
+      const w = triWeights(false);
       photo = albedoMul(SETS.rock, triRgb(mapTex(SETS.rock, 'Color'), wpv, SETS.rock.tile, w));
     } else if (kind === 'bark') {
-      const w = triWeights();
+      const w = triWeights(false);
       photo = albedoMul(SETS.bark, triRgb(mapTex(SETS.bark, 'Color'), wpv, SETS.bark.tile, w));
+    } else if (isLocalKind) {
+      const w = triWeights(true);
+      const set = SETS[kind as 'armor' | 'tracks' | 'cloth'];
+      photo = albedoMul(set, triRgb(mapTex(set, 'Color'), wpv, set.tile, w));
     }
 
-    const base = photo ? photo.mul(k) : vec3(k, k, k);
+    let base = (photo ? photo.mul(k) : vec3(k, k, k)) as unknown as N3;
+    // vehicle dust/mud: builds up from the local ground plane, patchy
+    if (dustAmt > 0 && (kind === 'armor' || kind === 'tracks')) {
+      const patch = vnoise(vec2(wp.x, wp.z).div(0.62) as unknown as N2).mul(0.55).add(0.55);
+      const dust = smoothstep(dustH, dustH * 0.18, wp.y).mul(patch).mul(dustAmt);
+      base = mix(base, base.mul(vec3(1.55, 1.42, 1.02)), dust) as unknown as N3;
+    }
     return base;
   })();
 
   mat.colorNode = detail;
 
-  // ---- REAL relief: world-space finite differences of the height field ----
-  // (procedural structure + photo displacement, in meters — see header)
+  // ---- REAL relief: finite differences of the height field (world space,
+  // or local space for vehicle kinds) — procedural + photo disp, in meters
   const procAmp = PROC_AMP[kind];
-  if (procAmp > 0 || hasPhoto) {
-    const w = isGroundKind ? null : triWeights();
+  if (procAmp > 0 || HAS_DISP.has(kind)) {
+    const w = isGroundKind ? null : triWeights(isLocalKind);
 
     /** Total height (meters) at an arbitrary world position. */
     const hTotal = (wp: N3): NF => {
@@ -403,8 +453,12 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
         h = h.add(fbm(ground.div(0.4) as unknown as N2).mul(procAmp)) as unknown as NF;
       } else if (kind === 'terrain') {
         h = h.add(fbm(ground.div(0.6) as unknown as N2).mul(procAmp)) as unknown as NF;
-      } else if (kind === 'metal') {
+      } else if (kind === 'metal' || kind === 'armor') {
         h = h.add(vnoise(wall.div(0.9) as unknown as N2).mul(procAmp)) as unknown as NF;
+      } else if (kind === 'tracks') {
+        const t = fract(wp.x.div(0.145));
+        const bar = smoothstep(0.1, 0.2, t).mul(smoothstep(0.6, 0.5, t));
+        h = h.add(bar.mul(procAmp)) as unknown as NF;
       } else if (kind === 'roof' || kind === 'bark') {
         h = h.add(fbm(wall.div(0.3) as unknown as N2).mul(procAmp)) as unknown as NF;
       }
@@ -429,33 +483,40 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
         h = h.add(dispOf(SETS.rock)) as unknown as NF;
       } else if (kind === 'bark') {
         h = h.add(dispOf(SETS.bark)) as unknown as NF;
+      } else if (kind === 'armor') {
+        h = h.add(dispOf(SETS.armor)) as unknown as NF;
       }
       return h;
     };
 
     mat.normalNode = Fn(() => {
-      const wp = positionWorld.xyz as unknown as N3;
+      const wp = isLocalKind ? attrPos() : (positionWorld.xyz as unknown as N3);
       const h0 = hTotal(wp);
       const gx = hTotal(wp.add(vec3(EPS, 0, 0)) as unknown as N3).sub(h0);
       const gy = hTotal(wp.add(vec3(0, EPS, 0)) as unknown as N3).sub(h0);
       const gz = hTotal(wp.add(vec3(0, 0, EPS)) as unknown as N3).sub(h0);
       const grad = vec3(gx, gy, gz).div(EPS);
-      const nG = normalWorld.xyz.normalize();
+      const nG = (isLocalKind ? attrNrm() : (normalWorld.xyz as unknown as N3)).normalize();
       const gTan = grad.sub(nG.mul(dot(grad, nG)));
-      const nW = nG.sub(gTan).normalize();
-      return mat4mulV4(cameraViewMatrix, vec4(nW, 0.0)).xyz.normalize();
+      const nP = nG.sub(gTan).normalize();
+      if (isLocalKind) {
+        // perturbed in object space → let the node system apply the full
+        // model chain (vehicle group/turret/gun rotations included)
+        return (transformNormalToView as unknown as (n: unknown) => N3)(nP);
+      }
+      return mat4mulV4(cameraViewMatrix, vec4(nP, 0.0)).xyz.normalize();
     })();
   }
 
   // ---- roughness: photo structure around the tuned base + micro variance --
   const rBase = opts.roughness;
-  const wpr = positionWorld.xyz as unknown as N3;
+  const wpr = isLocalKind ? attrPos() : (positionWorld.xyz as unknown as N3);
   const varN = vnoise(vec2(wpr.x.add(wpr.z), wpr.y.add(wpr.z)).div(0.33) as unknown as N2)
     .sub(0.5)
     .mul(hasPhoto ? 0.08 : 0.16);
   let rough = float(rBase).add(varN) as unknown as NF;
   if (hasPhoto && kind !== 'grass') {
-    const w = isGroundKind ? null : triWeights();
+    const w = isGroundKind ? null : triWeights(isLocalKind);
     const roughOf = (set: PbrSet, tile?: number): NF => {
       const t = mapTex(set, 'Roughness');
       const s = w ? triScalar(t, wpr, tile ?? set.tile, w) : texAt(t, uvGround(wpr, tile ?? set.tile)).r;
@@ -468,8 +529,79 @@ export function detailedMaterial(kind: DetailKind, opts: DetailOptions): MeshSta
     else if (kind === 'roof') rough = rough.add(mix(roughOf(SETS.slate), roughOf(SETS.terra), terraMask)) as unknown as NF;
     else if (kind === 'stone') rough = rough.add(roughOf(SETS.rock)) as unknown as NF;
     else if (kind === 'bark') rough = rough.add(roughOf(SETS.bark)) as unknown as NF;
+    else if (isLocalKind) {
+      const set = SETS[kind as 'armor' | 'tracks' | 'cloth'];
+      rough = rough.add(roughOf(set)) as unknown as NF;
+      // dust films are matte — push roughness up where the hull is dusted
+      if (dustAmt > 0) {
+        const dust = smoothstep(dustH, dustH * 0.18, wpr.y).mul(dustAmt);
+        rough = rough.add(dust.mul(0.12)) as unknown as NF;
+      }
+    }
   }
   mat.roughnessNode = clamp(rough, 0.3, 1.0);
 
+  return mat;
+}
+
+// ---------------------------------------------------------------------------
+// Photo leaf-card material: alpha-tested canopy cards (FoliageGenerator).
+// The card geometry carries real UVs into a scanned CC0 leaf atlas whose
+// background is pre-filled with the mean leaf colour, so alpha-test edges
+// never fringe and distant mips blend toward foliage green instead of
+// thinning out. Species tint stays in vertex colors × instance colors; the
+// atlas is normalized to a mean-1.0 multiplier like every other photo set.
+// ---------------------------------------------------------------------------
+
+export type LeafSpecies = 'oak' | 'poplar' | 'apple' | 'bush';
+
+const LEAF_SETS: Record<LeafSpecies, { asset: string; norm: readonly [number, number, number] }> = {
+  oak: { asset: 'LeafSet016', norm: [8.68, 5.77, 30.53] },
+  poplar: { asset: 'LeafSet004', norm: [22.88, 15.15, 41.04] },
+  apple: { asset: 'LeafSet023', norm: [2.79, 1.88, 5.02] },
+  bush: { asset: 'LeafSet014', norm: [3.82, 2.47, 13.13] },
+};
+
+const texAtUv = (t: Texture): TexSample =>
+  (tslTexture as unknown as (tx: Texture) => TexSample)(t);
+
+export function leafCardMaterial(species: LeafSpecies): MeshStandardNodeMaterial {
+  const spec = LEAF_SETS[species];
+  const mat = new MeshStandardNodeMaterial({ roughness: 0.62, metalness: 0 });
+  mat.vertexColors = true;
+  mat.side = DoubleSide;
+  mat.shadowSide = DoubleSide;
+
+  const colUrl = `/textures/${spec.asset}/${spec.asset}_1K-JPG_Color.jpg`;
+  let colTex = texCache.get(colUrl);
+  if (!colTex) {
+    colTex = loader.load(colUrl);
+    colTex.wrapS = RepeatWrapping;
+    colTex.wrapT = RepeatWrapping;
+    colTex.anisotropy = 8;
+    colTex.colorSpace = SRGBColorSpace;
+    texCache.set(colUrl, colTex);
+  }
+  const opUrl = `/textures/${spec.asset}/${spec.asset}_1K-JPG_Opacity.jpg`;
+  let opTex = texCache.get(opUrl);
+  if (!opTex) {
+    opTex = loader.load(opUrl);
+    opTex.wrapS = RepeatWrapping;
+    opTex.wrapT = RepeatWrapping;
+    texCache.set(opUrl, opTex);
+  }
+
+  let c = texAtUv(colTex).rgb.mul(vec3(spec.norm[0], spec.norm[1], spec.norm[2])) as unknown as N3;
+  c = clamp(c, vec3(0.3, 0.3, 0.3), vec3(2.2, 2.2, 2.2)) as unknown as N3;
+  const l = luminance(c as unknown as Parameters<typeof luminance>[0]) as unknown as NF;
+  const mixN3 = mix as unknown as (a: N3, b: N3, t: number) => N3;
+  const rgb = mixN3(vec3(l, l, l) as unknown as N3, c, 0.65);
+  // boost so mip-averaged alpha keeps distant canopies solid, not skeletal
+  const alpha = clamp(texAtUv(opTex).r.mul(1.5), 0.0, 1.0);
+  // the cutout must ride in colorNode.a (NOT opacityNode): the WebGPU
+  // shadow pass derives its alpha-test alpha from colorNode.a / map only,
+  // so an opacityNode cutout would cast solid full-quad card shadows
+  mat.colorNode = (vec4 as unknown as (c: N3, a: NF) => typeof mat.colorNode)(rgb, alpha as unknown as NF);
+  mat.alphaTest = 0.4;
   return mat;
 }

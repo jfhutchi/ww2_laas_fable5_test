@@ -9,6 +9,18 @@ Reference set:
 
 ---
 
+## Post-release iteration 7 — vehicles, infantry, photo leaf-card foliage (closed)
+
+User feedback after iteration 6: "like what you did with the roads and textures — now do the same to the tanks and army guys; the trees look way too fake." Verified end-to-end on RTX: typecheck/build clean, shoot/compare regenerated, battery **15/15**, ~115–125 fps @1080p high, worldHash untouched, triangles DOWN 20.4M → 15.6M (cards are far lighter than icosphere canopies). Repo textures 32 MB total. Adversarially reviewed by a 15-agent workflow before commit (three confirmed findings, all fixed — see below).
+
+1. **Trees/hedges/shrubs rebuilt as photo leaf-card canopies** — the "way too fake" lollipop read was solid displaced-icosphere blobs. Every canopy path (FoliageGenerator `makeBlob`, BarrierMeshes hedge crowns, GroundCover shrubs) now scatters alpha-tested card quads over the same ellipsoid envelopes: per-species CC0 LeafSet atlases (oak 016 / poplar 004 / apple 023 / bush+hedge 014), shell normals so clusters still light as soft volumes, per-card atlas mirroring, baked value shading + flex, existing wind untouched. LeafSet `_Color` backgrounds are pre-filled with the mean leaf colour (sharp) so alpha edges never fringe white and distant mips *solidify* instead of thinning (plus opacity ×1.5 boost against mip-alpha erosion).
+2. **Tank photo-PBR** ('armor'/'tracks' kinds): Metal005 pitted cast steel on hull/turret, Metal038 + procedural grouser bars on tracks — sampled in **raw-attribute local space** so paint cannot swim while driving, relief via the finite-difference height path through `transformNormalToView` (parent group rotations included). Local-Y dust/mud gradient with per-material height calibration (hull heavy, turret skirt light, tracks caked), dust also raises roughness. Hull-side stars moved flush onto the upper-hull plates.
+3. **Infantry**: uniforms/kit on a coarse-weave Fabric066 'cloth' kind (raw-attribute space — `positionLocal` is instance-transformed and would swim on walking soldiers), plus deterministic per-slot instanceColor jitter seeded **before first render** (pipeline-compile trap) so squads stop reading as clone armies. Sandbags inherit the weave (burlap for free).
+4. **Review findings fixed** (multi-agent adversarial pass): (a) HIGH — the WebGPU shadow pass derives cutout alpha from `colorNode.a`/map only, never `opacityNode`; leaf cutouts moved into a vec4 colorNode so canopies cast dappled (not full-quad) shadows; (b) MED — gun barrels sit at local y≈0 in their pivot Groups and took maximum dust; they now use a dust-free armor material; (c) LOW — hedge instance scale anisotropy (up to 3.8:1) smeared the leaf photos; spread tightened.
+5. **Skipped, with reasons**: Polyhaven's CC0 model library has no European deciduous trees (inventory is pines/tropical/succulents — checked via API) and Sketchfab/Smithsonian downloads sit behind logins, so the glTF hero-tree/M4A1 stretch remains open; the card-canopy route delivered the realism jump without licensing risk.
+
+---
+
 ## Post-release iteration 6 — CC0 photo-PBR texture pass (closed)
 
 Bar: the procedural groundwork was done but every surface was still flat-shaded value noise — add real photo textures without losing the muted-olive grade or determinism. Verified on an RTX-class GPU: typecheck + build + shoot + compare clean, battery **15/15**, ~120 fps @1080p high (unchanged), worldHash untouched (render-only change). Repo +26 MB (11 ambientCG 1K-JPG sets × Color/Roughness/Displacement — see docs/ASSETS.md).
