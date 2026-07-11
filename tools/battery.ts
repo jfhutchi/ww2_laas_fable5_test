@@ -45,7 +45,12 @@ async function bootTo(page: Page, params: Record<string, string | number | boole
     else extra[k] = String(v);
   }
   opts.extra = extra;
-  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded' });
+  // Park first and use long timeouts: under software rasterization the
+  // outgoing page's render loop starves navigation, and a timed-out goto
+  // leaves a PENDING navigation that interrupts every later goto (the
+  // "interrupted by another navigation" cascade).
+  await page.goto('about:blank', { timeout: 180000 });
+  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(
     () => window.__oc && (window.__oc.ready || window.__oc.error !== null),
     undefined,
@@ -105,7 +110,7 @@ const checks: Check[] = [
       await bootTo(page, { mode: 'tactical', freeze: true });
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
       mkdirSync('shots/battery', { recursive: true });
-      await page.screenshot({ path: 'shots/battery/tactical.png' });
+      await page.screenshot({ path: 'shots/battery/tactical.png', timeout: 180000 });
     },
   },
   {
@@ -114,7 +119,7 @@ const checks: Check[] = [
     fn: async ({ page }) => {
       await bootTo(page, { mode: 'tank', freeze: true });
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
-      await page.screenshot({ path: 'shots/battery/tank.png' });
+      await page.screenshot({ path: 'shots/battery/tank.png', timeout: 180000 });
     },
   },
   {
@@ -128,7 +133,7 @@ const checks: Check[] = [
       assert(/draws \d+/.test(hudText), 'debug HUD draw calls missing');
       const s = await stats(page);
       assert(s.render.drawCalls > 0 && s.render.triangles > 0, 'debug HUD counters not real');
-      await page.screenshot({ path: 'shots/battery/debug_hud.png' });
+      await page.screenshot({ path: 'shots/battery/debug_hud.png', timeout: 180000 });
     },
   },
   {
@@ -506,6 +511,11 @@ async function main(): Promise<void> {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => pageErrors.push(err.message));
+  page.on('crash', () => {
+    // headed Chrome auto-reloads a crashed tab → the reload "interrupts" the
+    // next goto with the OLD url. Make the crash visible instead of cryptic.
+    console.error('[battery] PAGE CRASHED (renderer process died)');
+  });
 
   const ctx: CheckCtx = { browser, page, consoleErrors, pageErrors, seed: SEED };
 

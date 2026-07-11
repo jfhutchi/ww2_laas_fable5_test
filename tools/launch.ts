@@ -5,15 +5,26 @@
  * against the dev server on http://localhost:5173 — never about:blank.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { chromium, type Browser } from 'playwright';
 
 export interface LaunchRecipe {
   headless: boolean;
   channel?: string;
+  executablePath?: string;
   args: string[];
 }
+
+const SWIFTSHADER_ARGS = [
+  '--enable-unsafe-webgpu',
+  '--enable-features=Vulkan',
+  '--use-vulkan=swiftshader',
+  '--use-webgpu-adapter=swiftshader',
+];
+
+/** Pre-installed Chromium in managed containers (may differ from the pinned Playwright build). */
+const SYSTEM_CHROMIUM = '/opt/pw-browsers/chromium';
 
 const CANDIDATES: LaunchRecipe[] = [
   { headless: true, channel: 'chromium', args: [] },
@@ -23,8 +34,45 @@ const CANDIDATES: LaunchRecipe[] = [
     channel: 'chromium',
     args: ['--enable-unsafe-webgpu', '--use-angle=d3d11', '--enable-features=Vulkan'],
   },
+  // CPU-only containers: WebGPU over SwiftShader Vulkan.
+  { headless: true, channel: 'chromium', args: SWIFTSHADER_ARGS },
+  { headless: true, executablePath: SYSTEM_CHROMIUM, args: SWIFTSHADER_ARGS },
+  // Headless-new SwiftShader cannot allocate the WebGPU swapchain shared image
+  // (SharedImageBackingFactory missing → Device Lost). Headed under Xvfb works.
+  { headless: false, executablePath: SYSTEM_CHROMIUM, args: ['--no-sandbox', ...SWIFTSHADER_ARGS] },
   { headless: false, args: [] },
 ];
+
+/**
+ * Headed Chromium needs an X display. In containers without one, boot a
+ * shared Xvfb on :99 (reused across runs via the X lockfile).
+ */
+async function ensureDisplay(): Promise<string | null> {
+  if (process.env['DISPLAY']) return process.env['DISPLAY'];
+  if (!existsSync('/usr/bin/Xvfb')) return null;
+  const display = ':99';
+  const lock = '/tmp/.X99-lock';
+  // The lock file survives a killed Xvfb — trust it only if its pid is alive.
+  let alive = false;
+  if (existsSync(lock)) {
+    try {
+      const pid = parseInt(readFileSync(lock, 'utf8').trim(), 10);
+      alive = Number.isFinite(pid) && existsSync(`/proc/${pid}`);
+      if (!alive) rmSync(lock, { force: true });
+    } catch {
+      alive = false;
+    }
+  }
+  if (!alive) {
+    const child = spawn('Xvfb', [display, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    child.unref();
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return display;
+}
 
 const CACHE_PATH = '.cache/webgpu-flags.json';
 export const BASE_URL = 'http://localhost:5173';
@@ -37,14 +85,70 @@ async function probeRecipe(recipe: LaunchRecipe): Promise<Browser | null> {
       args: recipe.args,
     };
     if (recipe.channel) launchOpts.channel = recipe.channel;
+    if (recipe.executablePath) launchOpts.executablePath = recipe.executablePath;
+    if (!recipe.headless) {
+      const display = await ensureDisplay();
+      if (display) launchOpts.env = { ...process.env, DISPLAY: display };
+    }
     browser = await chromium.launch(launchOpts);
     const page = await browser.newPage();
     await page.goto(`${BASE_URL}/__webgpu_probe__`, { waitUntil: 'domcontentloaded' });
+    // Full swapchain smoke test: an adapter alone is not enough — headless
+    // SwiftShader yields an adapter whose canvas swapchain cannot allocate a
+    // shared image (Device Lost on first present). Clear a real canvas and
+    // verify the device survives the presented frame.
     const ok = await page.evaluate(async () => {
-      const gpu = (navigator as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+      interface GpuLike {
+        requestAdapter(): Promise<{ requestDevice(): Promise<GPUDeviceLike> } | null>;
+        getPreferredCanvasFormat(): string;
+      }
+      interface GPUDeviceLike {
+        lost: Promise<unknown>;
+        queue: { submit(buf: unknown[]): void; onSubmittedWorkDone(): Promise<void> };
+        createCommandEncoder(): {
+          beginRenderPass(desc: unknown): { end(): void };
+          finish(): unknown;
+        };
+      }
+      const gpu = (navigator as { gpu?: GpuLike }).gpu;
       if (!gpu) return false;
       const adapter = await gpu.requestAdapter();
-      return adapter !== null;
+      if (!adapter) return false;
+      try {
+        const device = await adapter.requestDevice();
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('webgpu') as unknown as {
+          configure(o: unknown): void;
+          getCurrentTexture(): { createView(): unknown };
+        } | null;
+        if (!ctx) return false;
+        ctx.configure({ device, format: gpu.getPreferredCanvasFormat(), alphaMode: 'premultiplied' });
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+          colorAttachments: [
+            {
+              view: ctx.getCurrentTexture().createView(),
+              clearValue: { r: 0, g: 0.5, b: 0, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
+          ],
+        });
+        pass.end();
+        device.queue.submit([enc.finish()]);
+        await device.queue.onSubmittedWorkDone();
+        // Give a potential async Device Lost a beat to surface.
+        const lost = await Promise.race([
+          device.lost.then(() => true),
+          new Promise<false>((r) => setTimeout(() => r(false), 750)),
+        ]);
+        return !lost;
+      } catch {
+        return false;
+      }
     });
     await page.close();
     if (ok) return browser;

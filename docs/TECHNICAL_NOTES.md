@@ -27,6 +27,16 @@ Enemy AI is intel-limited: it acts on contacts its own units can see (6 s memory
 
 `tools/launch.ts` probes Chromium flag sets for a WebGPU adapter (secure-context probe against the dev server, cached recipe) and auto-starts Vite. `shoot.ts` captures deterministic frames via `window.__oc` hooks (`ready/error/settle/stats`). `battery.ts` runs 15 checks driving the real game through `window.__oc.api` — genuine selection/orders/mode toggles; the only debug-only levers are health scaling and teleport staging, and even then outcomes (kills, capture, loss) are produced by the live simulation. `final-shots.ts` stages the six delivery frames. `compare.ts` builds labeled side-by-sides against `references/`.
 
+## Running without a GPU (SwiftShader containers)
+
+The harness self-configures on CPU-only machines; the details matter if you touch it:
+
+- **Launch recipe**: WebGPU works with SwiftShader Vulkan (`--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-webgpu-adapter=swiftshader`) but ONLY headed — headless-new cannot allocate the WebGPU swapchain shared image (`SharedImageBackingFactory` missing → Device Lost on first present). `launch.ts` boots a shared Xvfb on `:99` (stale X lock detected via `/proc/<pid>`) and its probe renders a real canvas frame, not just `requestAdapter()` — an adapter-only probe happily accepts the broken headless config.
+- **No 3D textures**: this Dawn/SwiftShader stack builds invalid 2D views for every 3D-texture operation (lazy zero-init and `writeTexture`), and each affected submit drops its whole command buffer. Volumetric-cloud noise therefore lives in 2D slice atlases with manual trilinear TSL sampling. Relatedly, `r16float` is not a legal STORAGE texture format per the WebGPU spec even where desktop Dawn tolerates it.
+- **InstancedMesh colors**: pipelines compile against the attributes present at first render — call `setColorAt` once before the mesh first draws or instance tints are silently ignored.
+- **Navigation pacing**: a busy render loop starves navigation commits; every tool parks on `about:blank` (fully awaited) and uses 180 s goto timeouts, because a timed-out goto leaves a pending navigation that interrupts every later one.
+- **Wall time**: ~4–5 fps at 1080p high preset; screenshot timeouts are 180 s and the full battery is a multi-hour run on 4 CPU cores.
+
 ## Performance
 
 High preset, RTX-class GPU @1080p headless: ~5.5–9.1 M triangles, 130–190 draw calls, 98–120 fps. Techniques: merged geometry per material family, InstancedMesh for everything repeated (stones, foliage, grass, soldiers, FX billboards), chunked terrain for frustum culling, shadow frustum following the camera with texel snapping, DOM-based HUD (zero per-frame canvas text), pooled particles/decals with circular buffers, staggered AI/spotting/cover scans, path budget per tick. Presets scale vertex spacing, instancing density, antialiasing, pixel ratio and shadow map size — never systems.

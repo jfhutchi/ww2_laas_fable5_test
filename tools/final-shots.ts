@@ -14,7 +14,8 @@ async function boot(page: Page, params: Record<string, string | number | boolean
   if (params['mode']) opts.mode = String(params['mode']);
   if (params['hud']) opts.hud = true;
   if (params['freeze']) opts.freeze = true;
-  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded' });
+  await page.goto('about:blank', { timeout: 180000 }); // park: see battery.ts note
+  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => window.__oc && (window.__oc.ready || window.__oc.error !== null), undefined, {
     timeout: 240000,
     polling: 250,
@@ -31,7 +32,7 @@ async function settle(page: Page, frames: number): Promise<void> {
 
 async function shot(page: Page, path: string): Promise<void> {
   await settle(page, 20);
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 180000 });
   console.log(`[final] wrote ${path}`);
 }
 

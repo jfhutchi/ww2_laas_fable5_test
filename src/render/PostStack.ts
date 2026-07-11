@@ -214,8 +214,8 @@ export class PostStack {
         c.assign(mix(c, c.mul(vec3(0.78, 0.9, 1.18)), smoothstep(0.5, 0.06, lum).mul(0.5)));
         // warm gold highlights
         c.assign(mix(c, c.mul(vec3(1.2, 1.02, 0.78)), smoothstep(0.3, 1.1, lum).mul(0.42)));
-        // saturation
-        c.assign(mix(vec3(dot(c, LUMA)), c, float(1.16)));
+        // saturation (kept gentle — the reference reads muted, never lime)
+        c.assign(mix(vec3(dot(c, LUMA)), c, float(1.07)));
         // filmic contrast around scene-linear mid-gray (per channel — see exp note)
         const k = c.div(0.18).max(0.0);
         c.assign(vec3(pow(k.x, 1.26), pow(k.y, 1.26), pow(k.z, 1.26)).mul(0.18));

@@ -10,6 +10,7 @@ export const VILLAGE_RADIUS = 240;
 export const CAPTURE_RADIUS = 30;
 /** Nav/cover grid cell size in meters (Phase 2 consumes this). */
 export const GRID_CELL = 2;
-/** Sun direction reference: azimuth/elevation for late afternoon. */
+/** Sun direction reference: azimuth/elevation for golden hour. Elevation
+ *  matches the photographic sunset HDRI (low sun, long reference shadows). */
 export const SUN_AZIMUTH = 2.35;
-export const SUN_ELEVATION = 0.42;
+export const SUN_ELEVATION = 0.22;

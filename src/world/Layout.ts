@@ -305,10 +305,12 @@ export function generateLayout(seed: number): WorldModel {
       const bx = Math.cos(a) * r;
       const bz = Math.sin(a) * r;
       if (Math.hypot(bx - churchX, bz - churchZ) < 24) continue;
-      if (distToAnyRoad(bx, bz) < 4.5) continue;
       const kind: BuildingKind = villageRng.chance(0.6) ? 'townhouse-stone' : 'townhouse-brick';
       const hw = villageRng.range(3.8, 5.2);
       const hd = villageRng.range(3.2, 4.2);
+      // footprint CORNERS must clear the pavement, not just the centre —
+      // the plaza aprons are 20-24 m wide and were eating house corners
+      if (distToAnyRoad(bx, bz) < Math.hypot(hw, hd) + 1.2) continue;
       // door faces the square: outward normal points from centre to house
       addBuilding(kind, bx, bz, a + Math.PI / 2, hw, hd, villageRng.range(5.6, 6.6), 2, damageFor(bx, bz));
     }
@@ -338,11 +340,13 @@ export function generateLayout(seed: number): WorldModel {
         const floors: 1 | 2 = kind === 'townhouse-stone' || kind === 'townhouse-brick' ? 2 : kind === 'farmhouse' && villageRng.chance(0.5) ? 2 : 1;
         const wallH = floors === 2 ? villageRng.range(5.6, 6.6) : villageRng.range(3, 3.8);
         const normal = roadDir + (Math.PI / 2) * side;
-        const setback = (armWidths[a] ?? 5.4) / 2 + hd + villageRng.range(1.4, inCore ? 3 : 8);
+        // setback by the LONG half-extent: rotation decides which axis faces
+        // the road, so the safe distance is the larger one either way
+        const setback = (armWidths[a] ?? 5.4) / 2 + Math.max(hw, hd) + villageRng.range(1.4, inCore ? 3 : 8);
         const bx = p.x + Math.cos(normal) * setback;
         const bz = p.z + Math.sin(normal) * setback;
-        // keep the crossroads square open and off other roads
-        if (Math.hypot(bx, bz) > 24 && distToAnyRoad(bx, bz) > hd * 0.5 + 1 && Math.hypot(bx - churchX, bz - churchZ) > 26) {
+        // keep the crossroads square open and corners off every road
+        if (Math.hypot(bx, bz) > 24 && distToAnyRoad(bx, bz) > Math.hypot(hw, hd) + 1 && Math.hypot(bx - churchX, bz - churchZ) > 26) {
           const rot = normal + Math.PI / 2; // gable parallel to road, door faces road
           addBuilding(kind, bx, bz, rot, hw, hd, wallH, floors, damageFor(bx, bz));
         }
@@ -368,11 +372,22 @@ export function generateLayout(seed: number): WorldModel {
     const cz = site.z + Math.sin(yardDir) * yardDist;
     if (Math.abs(cx) > PLAY_HALF - 60 || Math.abs(cz) > PLAY_HALF - 60) continue;
     const rot = villageRng.range(0, Math.PI * 2);
-    addBuilding('farmhouse', cx, cz, rot, 4.6, 3.8, villageRng.chance(0.5) ? 6 : 3.6, villageRng.chance(0.5) ? 2 : 1, damageFor(cx, cz));
-    const barnRot = rot + Math.PI / 2 + villageRng.range(-0.2, 0.2);
-    addBuilding('barn', cx + Math.cos(rot) * 16, cz + Math.sin(rot) * 16, barnRot, 6, 4.2, 3.4, 1, damageFor(cx, cz));
+    // farmsteads had NO road test at all — clear every footprint corner
+    if (distToAnyRoad(cx, cz) > Math.hypot(4.6, 3.8) + 1) {
+      addBuilding('farmhouse', cx, cz, rot, 4.6, 3.8, villageRng.chance(0.5) ? 6 : 3.6, villageRng.chance(0.5) ? 2 : 1, damageFor(cx, cz));
+    }
+    const barnX = cx + Math.cos(rot) * 16;
+    const barnZ = cz + Math.sin(rot) * 16;
+    if (distToAnyRoad(barnX, barnZ) > Math.hypot(6, 4.2) + 1) {
+      const barnRot = rot + Math.PI / 2 + villageRng.range(-0.2, 0.2);
+      addBuilding('barn', barnX, barnZ, barnRot, 6, 4.2, 3.4, 1, damageFor(cx, cz));
+    }
     if (villageRng.chance(0.7)) {
-      addBuilding('shed', cx + Math.cos(rot + 2.2) * 13, cz + Math.sin(rot + 2.2) * 13, rot + villageRng.range(0, 1), 2.4, 2, 2.4, 1, 'intact');
+      const shedX = cx + Math.cos(rot + 2.2) * 13;
+      const shedZ = cz + Math.sin(rot + 2.2) * 13;
+      if (distToAnyRoad(shedX, shedZ) > Math.hypot(2.4, 2) + 1) {
+        addBuilding('shed', shedX, shedZ, rot + villageRng.range(0, 1), 2.4, 2, 2.4, 1, 'intact');
+      }
     }
   }
 

@@ -69,6 +69,12 @@ export interface OcTestApi {
   startMission(): void;
   /** Position of the capture zone centre. */
   objective(): { x: number; z: number };
+  /** Current tactical-camera eye pose (matches the ?cam= format). */
+  getCameraPose(): { x: number; y: number; z: number; yaw: number; pitch: number; fov: number };
+  /** Re-aim the tactical camera from a ?cam=-format pose (framing shots). */
+  setCameraPose(pose: { x: number; y: number; z: number; yaw: number; pitch: number; fov: number }): void;
+  /** DEBUG ONLY: world-group inventory (name/mesh count/triangles) for harness diagnosis. */
+  debugScene(): { name: string; kind: string; visible: boolean; count: number; tris: number }[];
   /** World-space positions of living units for targeting checks. */
   units(side: 'player' | 'enemy'): { id: number; type: string; x: number; z: number; hp: number }[];
   /** DEBUG ONLY (?debug=1): scale a side's hit points (real damage still applies). */

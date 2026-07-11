@@ -13,11 +13,11 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
-  MeshStandardMaterial,
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
 
 export interface VehicleRig {
   group: Group;
@@ -27,8 +27,9 @@ export interface VehicleRig {
   muzzleLength: number;
 }
 
-const OLIVE = new Color(0.34, 0.36, 0.22);
-const OLIVE_DK = new Color(0.27, 0.29, 0.18);
+// kept dark — the full golden-hour sun washes anything lighter to tan
+const OLIVE = new Color(0.265, 0.285, 0.175);
+const OLIVE_DK = new Color(0.215, 0.235, 0.15);
 const GRAY_DE = new Color(0.38, 0.39, 0.37);
 const GRAY_DK = new Color(0.3, 0.31, 0.3);
 const TRACK = new Color(0.21, 0.2, 0.19);
@@ -41,8 +42,10 @@ const JERRY = new Color(0.24, 0.28, 0.18);
 const STEEL = new Color(0.13, 0.13, 0.14);
 const TOOLWOOD = new Color(0.31, 0.22, 0.14);
 
-const MAT_BODY = new MeshStandardMaterial({ vertexColors: true, roughness: 0.74, metalness: 0.14 });
-const MAT_TRACK = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.08 });
+// cast-armor micro detail + matte paint — bare StandardMaterial at 0.74
+// roughness read as plastic toy shells in the hero third-person frame
+const MAT_BODY = detailedMaterial('metal', { roughness: 0.86, metalness: 0.06 });
+const MAT_TRACK = detailedMaterial('metal', { roughness: 0.97, metalness: 0.1 });
 
 function paint(g: BufferGeometry, base: Color, rng: Rng, mottle = 0.07, jitter = 0): BufferGeometry {
   const pos = g.attributes['position'];
@@ -85,7 +88,7 @@ function cyl(rTop: number, rBot: number, h: number, seg: number, x: number, y: n
   return paint(g, base, rng);
 }
 
-function meshOf(parts: BufferGeometry[], mat: MeshStandardMaterial): Mesh {
+function meshOf(parts: BufferGeometry[], mat: Mesh["material"]): Mesh {
   const merged = mergeGeometries(parts, false);
   if (!merged) throw new Error('vehicle merge failed');
   merged.computeVertexNormals();
@@ -170,20 +173,14 @@ export function buildSherman(seed: number): VehicleRig {
   // bow MG ball
   hullParts.push(paint(new SphereGeometry(0.14, 8, 6).translate(L * 0.34, 1.28, -0.5), OLIVE_DK, rng));
   hullParts.push(cyl(0.045, 0.045, 0.5, 6, L * 0.52, 1.28, -0.5, TRACK, rng, { rotZ: Math.PI / 2 }));
-  // ---- field stowage & tools (reads strongly from the 3rd-person rear view)
-  // sandbag/log field armour lashed across the glacis
-  for (let i = 0; i < 5; i++) {
-    hullParts.push(cyl(0.12, 0.12, 0.32, 8, L * 0.33, 1.26, -0.62 + i * 0.31, new Color(0.33, 0.31, 0.25), rng, { rotZ: Math.PI / 2 }));
-  }
+  // ---- field stowage & tools (kept ON the deck silhouette — anything that
+  // pokes past the hull line reads as floating junk from the chase camera)
   // rear engine-deck jerrycans + crate + duffel
   for (let i = 0; i < 4; i++) {
-    hullParts.push(bx(0.22, 0.34, 0.16, -L * 0.38, 1.63, -0.55 + i * 0.33, JERRY, rng, { jitter: 0.008 }));
+    hullParts.push(bx(0.22, 0.28, 0.16, -L * 0.38, 1.6, -0.55 + i * 0.33, JERRY, rng, { jitter: 0.008 }));
   }
-  hullParts.push(bx(0.52, 0.32, 0.5, -L * 0.29, 1.6, 0.45, CRATE, rng, { jitter: 0.015 }));
-  hullParts.push(bx(0.6, 0.26, 0.36, -L * 0.42, 1.58, 0.42, CANVAS, rng, { jitter: 0.03, mottle: 0.14 }));
-  // rolled tarps along both fenders
-  hullParts.push(cyl(0.1, 0.1, 1.7, 8, -L * 0.02, 1.5, bodyW / 2 + 0.15, CANVAS, rng, { rotX: Math.PI / 2 }));
-  hullParts.push(cyl(0.09, 0.09, 1.3, 8, L * 0.1, 1.5, -(bodyW / 2 + 0.14), CANVAS, rng, { rotX: Math.PI / 2 }));
+  hullParts.push(bx(0.52, 0.26, 0.5, -L * 0.29, 1.57, 0.45, CRATE, rng, { jitter: 0.015 }));
+  hullParts.push(bx(0.6, 0.2, 0.36, -L * 0.42, 1.55, 0.42, CANVAS, rng, { jitter: 0.03, mottle: 0.14 }));
   // tools on the engine deck: shovel + axe (handle + head)
   hullParts.push(bx(0.72, 0.028, 0.055, -L * 0.16, 1.5, 0.34, TOOLWOOD, rng, {}));
   hullParts.push(bx(0.1, 0.02, 0.15, -L * 0.16 - 0.42, 1.5, 0.34, STEEL, rng, {}));
@@ -206,8 +203,18 @@ export function buildSherman(seed: number): VehicleRig {
   const turretParts: BufferGeometry[] = [];
   const dome = new SphereGeometry(0.88, 36, 22);
   dome.scale(1.15, 0.62, 1);
+  // M4A1 cast turret: flatten the rear face (bustle) — a pure ellipsoid
+  // reads as an egg from the third-person chase view
+  {
+    const p = dome.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      if (x < -0.62) p.setX(i, -0.62 - (x + 0.62) * 0.25);
+    }
+    dome.computeVertexNormals();
+  }
   dome.translate(0, 0.3, 0);
-  turretParts.push(paint(dome, OLIVE, rng, 0.06));
+  turretParts.push(paint(dome, OLIVE, rng, 0.04));
   turretParts.push(cyl(0.92, 0.98, 0.24, 32, 0, 0.12, 0, OLIVE_DK, rng, {}));
   // commander cupola + hatch
   turretParts.push(cyl(0.26, 0.28, 0.16, 20, -0.3, 0.78, 0.3, OLIVE_DK, rng, {}));

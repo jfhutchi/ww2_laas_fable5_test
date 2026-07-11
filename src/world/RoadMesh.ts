@@ -5,14 +5,16 @@
  * near the village so paved roads read at tactical zoom.
  */
 
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { fbm2D } from '../core/Noise.ts';
 import { hash2D } from '../core/Random.ts';
 import { lerp, smoothstep } from '../core/MathUtil.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
 import type { WorldModel } from './WorldTypes.ts';
 import type { Ground } from './Ground.ts';
 
-const MAT_ROAD = new MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0 });
+// gravel speckle + pebble bump from the shared detail law (was flat-lit)
+const MAT_ROAD = detailedMaterial('road', { roughness: 0.97 });
 MAT_ROAD.name = 'roads';
 
 // cross-section sample offsets as fractions of half-width (+ verge apron)
@@ -98,6 +100,14 @@ export function buildRoads(model: WorldModel, ground: Ground): Group {
           r *= 0.68;
           g *= 0.68;
           b *= 0.7;
+        }
+        // grass strip between the wheel tracks on cart roads
+        if (road.kind === 'dirt' && Math.abs(f) < 0.22) {
+          const strip = fbm2D(x * 0.16, z * 0.16, seed ^ 0x66, 2);
+          const k = (0.3 + strip * 0.5) * (1 - Math.abs(f) / 0.22);
+          r = lerp(r, 0.3, k);
+          g = lerp(g, 0.32, k);
+          b = lerp(b, 0.17, k);
         }
         // mud/pothole darkening from craters (damaged approach)
         const cm = ground.craterMask(x, z);

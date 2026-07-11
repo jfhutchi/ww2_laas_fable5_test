@@ -58,7 +58,8 @@ async function main(): Promise<void> {
 
   const urlOpts: Parameters<typeof ocUrl>[0] = { seed, preset, mode: 'tank', debug: true, freeze: true };
   if (args['noclouds'] !== undefined) urlOpts.extra = { noclouds: '1' };
-  await page.goto(ocUrl(urlOpts), { waitUntil: 'domcontentloaded' });
+  await page.goto('about:blank', { timeout: 180000 }); // park: see battery.ts note
+  await page.goto(ocUrl(urlOpts), { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => window.__oc && (window.__oc.ready || window.__oc.error !== null), undefined, {
     timeout: 240000,
     polling: 250,
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
     if (window.__oc.settle) await window.__oc.settle(f);
   }, settleFrames);
   mkdirSync(dirname(out), { recursive: true });
-  await page.screenshot({ path: out });
+  await page.screenshot({ path: out, timeout: 180000 });
   const stats = await page.evaluate(() => JSON.stringify(window.__oc.stats));
   console.log(`[hero] wrote ${out}`);
   console.log(`[hero:stats] ${stats}`);
