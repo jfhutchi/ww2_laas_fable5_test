@@ -13,11 +13,11 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
-  MeshStandardMaterial,
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
 
 export interface VehicleRig {
   group: Group;
@@ -27,8 +27,9 @@ export interface VehicleRig {
   muzzleLength: number;
 }
 
-const OLIVE = new Color(0.34, 0.36, 0.22);
-const OLIVE_DK = new Color(0.27, 0.29, 0.18);
+// kept dark — the full golden-hour sun washes anything lighter to tan
+const OLIVE = new Color(0.265, 0.285, 0.175);
+const OLIVE_DK = new Color(0.215, 0.235, 0.15);
 const GRAY_DE = new Color(0.38, 0.39, 0.37);
 const GRAY_DK = new Color(0.3, 0.31, 0.3);
 const TRACK = new Color(0.21, 0.2, 0.19);
@@ -41,8 +42,10 @@ const JERRY = new Color(0.24, 0.28, 0.18);
 const STEEL = new Color(0.13, 0.13, 0.14);
 const TOOLWOOD = new Color(0.31, 0.22, 0.14);
 
-const MAT_BODY = new MeshStandardMaterial({ vertexColors: true, roughness: 0.74, metalness: 0.14 });
-const MAT_TRACK = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.08 });
+// cast-armor micro detail + matte paint — bare StandardMaterial at 0.74
+// roughness read as plastic toy shells in the hero third-person frame
+const MAT_BODY = detailedMaterial('metal', { roughness: 0.86, metalness: 0.06 });
+const MAT_TRACK = detailedMaterial('metal', { roughness: 0.97, metalness: 0.1 });
 
 function paint(g: BufferGeometry, base: Color, rng: Rng, mottle = 0.07, jitter = 0): BufferGeometry {
   const pos = g.attributes['position'];
@@ -85,7 +88,7 @@ function cyl(rTop: number, rBot: number, h: number, seg: number, x: number, y: n
   return paint(g, base, rng);
 }
 
-function meshOf(parts: BufferGeometry[], mat: MeshStandardMaterial): Mesh {
+function meshOf(parts: BufferGeometry[], mat: Mesh["material"]): Mesh {
   const merged = mergeGeometries(parts, false);
   if (!merged) throw new Error('vehicle merge failed');
   merged.computeVertexNormals();

@@ -33,7 +33,7 @@ const MAT_DARK = new MeshStandardMaterial({ color: new Color(0.045, 0.04, 0.035)
 const STONE = new Color(0.72, 0.67, 0.54);
 const PLASTER = new Color(0.79, 0.74, 0.63);
 const BRICK = new Color(0.52, 0.36, 0.3);
-const TILE_TERRACOTTA = new Color(0.56, 0.32, 0.22);
+const TILE_TERRACOTTA = new Color(0.44, 0.28, 0.2); // weathered — bright orange reads toy-like
 const TILE_SLATE = new Color(0.32, 0.33, 0.36);
 const WOOD_W = new Color(0.4, 0.33, 0.25);
 const CHAR = new Color(0.1, 0.09, 0.08);
@@ -286,7 +286,7 @@ function buildHouse(spec: BuildingSpec): Group {
     new Color(0.45, 0.36, 0.26),
     new Color(0.5, 0.48, 0.42),
   ]);
-  const tileC = new Color().copy(isBarn || isShed ? TILE_SLATE : rng.chance(0.72) ? TILE_TERRACOTTA : TILE_SLATE);
+  const tileC = new Color().copy(isBarn || isShed ? TILE_SLATE : rng.chance(0.55) ? TILE_TERRACOTTA : TILE_SLATE);
 
   const t = 0.34; // wall thickness
 

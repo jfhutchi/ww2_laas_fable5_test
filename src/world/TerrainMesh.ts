@@ -20,11 +20,12 @@
  * Deterministic: all noise/hash seeds derive from model.seed ^ constants.
  */
 
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import type { GraphicsPreset } from '../app/Config.ts';
 import { lerp } from '../core/MathUtil.ts';
 import { fbm2D, warped2D } from '../core/Noise.ts';
 import { hash2D } from '../core/Random.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
 import type { Ground } from './Ground.ts';
 import { PLAY_HALF } from './WorldConst.ts';
 import type { CropKind, WorldModel } from './WorldTypes.ts';
@@ -40,24 +41,25 @@ const CHUNKS = 4;
 
 type Rgb = readonly [number, number, number];
 
-const GRASS: Rgb = [0.30, 0.385, 0.185];
+// Muted late-summer meadow (the reference reads olive/sage, never lime).
+const GRASS: Rgb = [0.255, 0.3, 0.15];
+/** sun-dried worn grass — patches lerp toward this to break the carpet */
+const DRY: Rgb = [0.4, 0.35, 0.185];
 const SCORCH: Rgb = [0.23, 0.2, 0.17];
-const MOISTURE: Rgb = [0.3, 0.36, 0.22];
+const MOISTURE: Rgb = [0.24, 0.285, 0.175];
 
 const CROP_COLORS: Record<CropKind, Rgb> = {
   wheat: [0.62, 0.54, 0.3],
   hay: [0.58, 0.52, 0.34],
-  pasture: [0.38, 0.46, 0.24],
+  pasture: [0.33, 0.385, 0.2],
   plow: [0.4, 0.32, 0.24],
-  orchard: [0.36, 0.44, 0.23],
+  orchard: [0.32, 0.375, 0.195],
 };
 
-/** One material shared by all 32 chunks — a single pipeline for the ground. */
-const terrainMaterial = new MeshStandardMaterial({
-  vertexColors: true,
-  roughness: 0.96,
-  metalness: 0,
-});
+/** One material shared by all 32 chunks — a single pipeline for the ground.
+ *  detailedMaterial adds the macro/meso/micro bands + bump relief the rest
+ *  of the world already carries (the terrain was the last flat surface). */
+const terrainMaterial = detailedMaterial('terrain', { roughness: 0.96 });
 terrainMaterial.name = 'terrain';
 
 interface ChunkSpec {
@@ -310,6 +312,15 @@ function paintVertex(out: Float32Array, o: number, x: number, z: number, ground:
     r = lerp(r, SCORCH[0], k);
     g = lerp(g, SCORCH[1], k);
     b = lerp(b, SCORCH[2], k);
+  }
+
+  // Sun-dried worn patches — the meadow must never read as one green carpet.
+  const dryRaw = warped2D(x * 0.013, z * 0.013, seed ^ 0x0d27, 1.6, 3);
+  const dry = Math.max(0, (dryRaw - 0.52) * 2.4);
+  if (!field && dry > 0) {
+    r = lerp(r, DRY[0], Math.min(0.75, dry));
+    g = lerp(g, DRY[1], Math.min(0.75, dry));
+    b = lerp(b, DRY[2], Math.min(0.75, dry));
   }
 
   // Organic tonal variation everywhere — kills flat-looking ground.

@@ -183,7 +183,10 @@ export class VolumetricClouds {
           const px = ((x + 0.5) / N) * 8;
           const py = ((y + 0.5) / N) * 8;
           const pz = ((z + 0.5) / N) * 8;
-          const perlin = fbm3D(px, py, pz, seed ^ 0x1a2b3, 8, 4);
+          // value-noise fbm is flatter than gradient perlin — stretch it back
+          // to the contrast the GPU bake had, or the deck thins to nothing
+          const perlinRaw = fbm3D(px, py, pz, seed ^ 0x1a2b3, 8, 4);
+          const perlin = Math.min(1, Math.max(0, (perlinRaw - 0.5) * 2.6 + 0.62));
           const w0 = 1 - worley3D(px * 0.5, py * 0.5, pz * 0.5, seed ^ 0x77aa1, 4);
           const w1 = 1 - worley3D(px, py, pz, seed ^ 0x77aa2, 8);
           const w2 = 1 - worley3D(px * 2, py * 2, pz * 2, seed ^ 0x77aa3, 16);
@@ -226,7 +229,8 @@ export class VolumetricClouds {
       for (let x = 0; x < W; x++) {
         const wx = ((x + 0.5) / W - 0.5) * span + offX;
         const wy = ((y + 0.5) / W - 0.5) * span + offY;
-        const raw = fbm2D(wx, wy, seed ^ 0x5eed, 3, 2.2, 0.5);
+        const rawFlat = fbm2D(wx, wy, seed ^ 0x5eed, 3, 2.2, 0.5);
+        const raw = (rawFlat - 0.5) * 2.2 + 0.5; // value-noise variance stretch
         // contrast stretch baked in: dense cores + clear lanes (fbm hugs 0.5)
         const t = Math.min(1, Math.max(0, (raw - 0.3) / (0.78 - 0.3)));
         const v = t * t * (3 - 2 * t);

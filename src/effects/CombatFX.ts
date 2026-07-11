@@ -141,7 +141,7 @@ export class CombatFX {
     const smokeMat = new MeshBasicMaterial({
       map: softTex,
       transparent: true,
-      opacity: 0.34,
+      opacity: 0.46,
       depthWrite: false,
       fog: true,
     });
@@ -150,6 +150,10 @@ export class CombatFX {
     this.smokeMesh.frustumCulled = false;
     this.smokeMesh.renderOrder = 20;
     this.smokeMesh.count = 0;
+    // create instanceColor BEFORE the first render — the pipeline compiles
+    // against the attributes present at build time, so a later setColorAt
+    // would never be consumed (particles rendered stark white)
+    this.smokeMesh.setColorAt(0, new Color(1, 1, 1));
     this.root.add(this.smokeMesh);
 
     const flashMat = new MeshBasicMaterial({
@@ -164,6 +168,7 @@ export class CombatFX {
     this.flashMesh.frustumCulled = false;
     this.flashMesh.renderOrder = 22;
     this.flashMesh.count = 0;
+    this.flashMesh.setColorAt(0, new Color(1, 1, 1)); // see smokeMesh note
     this.root.add(this.flashMesh);
 
     const debrisGeo = new BoxGeometry(0.16, 0.16, 0.16);
@@ -453,13 +458,16 @@ export class CombatFX {
             y: f.y,
             z: f.z + this.rng.range(-1, 1) * f.strength,
             vx: this.rng.range(-0.2, 0.7), // light easterly drift
-            vy: this.rng.range(2.4, 4.4),
+            vy: this.rng.range(3.2, 5.6),
             vz: this.rng.range(-0.35, 0.35),
             life: 0,
-            ttl: this.rng.range(7, 13),
-            size: this.rng.range(2.2, 4.2) * (0.6 + f.strength),
-            grow: 2.1,
-            r: 0.15, g: 0.14, b: 0.13,
+            // tall war-smoke columns — the reference skyline is smoke-dominated
+            ttl: this.rng.range(11, 19),
+            size: this.rng.range(2.6, 5.0) * (0.6 + f.strength),
+            grow: 2.3,
+            // lit mid-gray — 0.15 charcoal disappeared against the ground
+            // from the tactical altitude; war smoke reads by its lit flank
+            r: 0.34, g: 0.32, b: 0.3,
             fade: 0.8,
           });
         }
