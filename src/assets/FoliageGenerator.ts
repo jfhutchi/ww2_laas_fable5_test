@@ -129,7 +129,7 @@ function makeFoliageMaterials(seed: number): FoliageMaterials {
   const ang = new Rng((seed ^ 0x33d17b) >>> 0).range(0, Math.PI * 2);
   const dirU = uniform(new Vector2(Math.cos(ang), Math.sin(ang)));
   const windDir = vec2(dirU as unknown as N2) as unknown as N2;
-  const bark = detailedMaterial('wood', { roughness: 0.94 });
+  const bark = detailedMaterial('bark', { roughness: 0.94 });
   const leaf = detailedMaterial('foliage', { roughness: 0.9 });
   applyWind(bark, windDir);
   applyWind(leaf, windDir);

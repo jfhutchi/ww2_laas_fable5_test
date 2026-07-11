@@ -9,6 +9,19 @@ Reference set:
 
 ---
 
+## Post-release iteration 6 — CC0 photo-PBR texture pass (closed)
+
+Bar: the procedural groundwork was done but every surface was still flat-shaded value noise — add real photo textures without losing the muted-olive grade or determinism. Verified on an RTX-class GPU: typecheck + build + shoot + compare clean, battery **15/15**, ~120 fps @1080p high (unchanged), worldHash untouched (render-only change). Repo +26 MB (11 ambientCG 1K-JPG sets × Color/Roughness/Displacement — see docs/ASSETS.md).
+
+1. **Photo-texture layer in the shared material law** (`render/MaterialDetail.ts`): 11 CC0 ambientCG sets (two meadow grasses patch-blended, soil, gravel, paving setts, lime plaster, brick, layered limestone, terracotta + slate roof tiles, bark) sampled in world space — XZ-planar for ground kinds, |normalWorld|⁸ triplanar for walls/roofs/trunks; no UV unwrapping anywhere. Albedos are normalized to mean-1.0 LINEAR multipliers (per-channel reciprocals from offline stats) and partially desaturated, so the painted vertex palette and golden-hour grade still rule; the procedural macro/meso/micro bands stay on top and keep killing tiling. Surface classes inside merged meshes are recovered from the paint itself: brick-red vs plaster (r−g), terracotta vs slate (r−b), cobbled vs dirt road (r/b ratio **and** brightness — the damaged approach shares the paved hue and must stay broken dirt), crop/worn soil vs meadow. Norman facades get a render-coat mask: stone coursing shows only in flaked patches under lime render that sits ~2 mm proud.
+2. **`bumpMap()` was a silent no-op — relief is now real.** three's BumpMapNode offsets UVs via a context that only TextureNodes consume, so the previous pure-expression procedural heights produced a zero gradient: none of the "bump relief" ever lit. Replaced with world-space finite differences of a meters-scaled total height field (procedural coursing/grooves/clods + photo Displacement maps) — 4 evaluations at ±3.5 mm offsets → 3D gradient → perturbed `normalWorld` → view space. Mortar recesses, tile lips, rock strata and road gravel now genuinely catch the low sun; no normal-map files are shipped at all.
+3. **Roads staged by kind**: cart roads blend crumbly soil with patchy gravel wear, the paved arm + parvis + rond-point read as worn setts, and the shelled approach stays churned dirt (brightness-gated mask). Tree trunks moved from plank 'wood' to a new 'bark' kind.
+4. **Deliberately skipped**: Poly Haven HDRI sky (a photographic sky was previously trialed and rejected as blurry, and the current procedural dome + cloud deck is an approved look — revisit only with a side-by-side win) and the glTF M4A1/hero-tree stretch goal (CC0 provenance/quality bar not met in-session; VehicleRig contract notes remain in TankGenerator).
+
+Remaining texture-adjacent ledger: far-field annulus + distant silhouettes untextured (impostor atlas still the answer), infantry/props untouched by the photo layer, facade streak grime under eaves still wants a per-building local frame.
+
+---
+
 ## Post-release iteration 5 — reference-similarity pass on a CPU-only rig (closed)
 
 Bar restated by the user: get as close to `references/` as possible without artists/animators. Verified end-to-end on a GPU-less container (WebGPU over SwiftShader Vulkan, headed Chromium under Xvfb) — which surfaced real spec violations that desktop Dawn had been forgiving:
