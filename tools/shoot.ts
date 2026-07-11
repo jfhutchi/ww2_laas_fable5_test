@@ -51,10 +51,10 @@ export interface ShotSpec {
 export async function capture(page: Page, spec: ShotSpec, timeoutMs = 240000): Promise<string> {
   const url = ocUrl(spec.url);
   console.log(`[shoot] ${spec.name}: ${url}`);
-  // park on about:blank first — the previous page's render loop can starve
-  // navigation under software rasterization (goto default 30s times out)
-  await page.goto('about:blank').catch(() => undefined);
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  // Fully AWAIT parking on about:blank (kills the previous page's render
+  // loop). A swallowed half-done navigation here interrupts the next goto.
+  await page.goto('about:blank', { timeout: 180000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 180000 });
   const t0 = Date.now();
   await page
     .waitForFunction(() => window.__oc && (window.__oc.ready || window.__oc.error !== null), undefined, {

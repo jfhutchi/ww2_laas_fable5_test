@@ -45,7 +45,12 @@ async function bootTo(page: Page, params: Record<string, string | number | boole
     else extra[k] = String(v);
   }
   opts.extra = extra;
-  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded' });
+  // Park first and use long timeouts: under software rasterization the
+  // outgoing page's render loop starves navigation, and a timed-out goto
+  // leaves a PENDING navigation that interrupts every later goto (the
+  // "interrupted by another navigation" cascade).
+  await page.goto('about:blank', { timeout: 180000 });
+  await page.goto(ocUrl(opts), { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(
     () => window.__oc && (window.__oc.ready || window.__oc.error !== null),
     undefined,
