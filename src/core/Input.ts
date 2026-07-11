@@ -38,9 +38,12 @@ export class Input {
   private keys = new Set<string>();
   private pressedQueue: string[] = [];
   private clickQueue: ClickEvent[] = [];
+  // Pointer starts OFF-SCREEN (-1,-1) until the first real mousemove: a
+  // (0,0) default sits inside the top-left edge-pan zone, so every headless
+  // or untouched-mouse session slowly panned the tactical camera up-left.
   readonly pointer: PointerState = {
-    x: 0,
-    y: 0,
+    x: -1,
+    y: -1,
     ndcX: 0,
     ndcY: 0,
     buttons: 0,
