@@ -9,6 +9,19 @@ Reference set:
 
 ---
 
+## Post-release iteration 5 — reference-similarity pass on a CPU-only rig (closed)
+
+Bar restated by the user: get as close to `references/` as possible without artists/animators. Verified end-to-end on a GPU-less container (WebGPU over SwiftShader Vulkan, headed Chromium under Xvfb) — which surfaced real spec violations that desktop Dawn had been forgiving:
+
+1. **Black frame root-caused and fixed** — the volumetric-cloud bake used `r16float` STORAGE 3D textures (illegal per WebGPU spec) and 3D textures at all hit an invalid-2D-view Dawn path on this stack (lazy zero-init AND writeTexture), dropping every command buffer that bound them; the shared half-res pass died and GTAO multiplied the frame to black. Rebuilt as CPU-baked (period-wrapped fbm3D/worley3D in `core/Noise.ts`) **2D slice atlases** with manual trilinear TSL sampling — spec-clean everywhere, deterministic, no compute dependency.
+2. **Harness framing was fiction** — `?cam=` was parsed but `setPose` never called, and the rig's edge-pan drifted under the synthetic pointer: every "village crossroads" capture since the framing landed was actually the default pose ~150 m south (open wheat). Pose now applied + rig pinned under `freeze`; `getCameraPose`/`setCameraPose`/`debugScene` exposed on the test API; village camera retargeted to genuinely frame the plaza.
+3. **Palette/material truthing vs the reference frames**: terrain + roads moved onto the shared macro/meso/micro detail law (they were the last flat-lit surfaces); meadow retuned to muted olive with sun-dried worn patches; grass strip on cart-road centerlines; weathered terracotta + slate-heavier roof mix; cast-armor detail material + darker olive drab on vehicles (plastic-shine gone); infantry rebuilt with pelvis/chest/belt/knee proportions (torso was a 0.34×0.42 m slab); saturation eased, exposure 0.98.
+4. **Smoke actually tinted** — InstancedMesh pipelines compile against build-time attributes, so `setColorAt` after first render was ignored: every particle rendered stark white. instanceColor is now seeded pre-render; war-smoke columns are taller, longer-lived, lit mid-gray.
+5. **Cloud deck restored** — the CPU value-noise fields are flatter than the GPU gradient noise they replaced; contrast-stretched base + weather so the cumulus band survives the coverage remap.
+6. **Harness hardening for CPU-only containers**: SwiftShader launch recipes with a full swapchain smoke test (adapter-only probes accept broken headless configs), Xvfb fallback with stale-lock detection, screenshot/navigation timeouts sized for software rasterization, `--extra` URL-param passthrough in shoot.
+
+---
+
 ## Post-release iteration 4 — LAAS parity ports (closed)
 
 Bar restated by the user: as good or better than LAAS. Three parallel implementation agents ported from the LAAS source; orchestrated integration. Battery re-verified **15/15**; ~117 fps @1080p with the full chain.

@@ -506,6 +506,11 @@ async function main(): Promise<void> {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => pageErrors.push(err.message));
+  page.on('crash', () => {
+    // headed Chrome auto-reloads a crashed tab → the reload "interrupts" the
+    // next goto with the OLD url. Make the crash visible instead of cryptic.
+    console.error('[battery] PAGE CRASHED (renderer process died)');
+  });
 
   const ctx: CheckCtx = { browser, page, consoleErrors, pageErrors, seed: SEED };
 

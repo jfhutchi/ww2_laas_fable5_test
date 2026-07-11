@@ -209,8 +209,18 @@ export function buildSherman(seed: number): VehicleRig {
   const turretParts: BufferGeometry[] = [];
   const dome = new SphereGeometry(0.88, 36, 22);
   dome.scale(1.15, 0.62, 1);
+  // M4A1 cast turret: flatten the rear face (bustle) — a pure ellipsoid
+  // reads as an egg from the third-person chase view
+  {
+    const p = dome.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      if (x < -0.62) p.setX(i, -0.62 - (x + 0.62) * 0.25);
+    }
+    dome.computeVertexNormals();
+  }
   dome.translate(0, 0.3, 0);
-  turretParts.push(paint(dome, OLIVE, rng, 0.06));
+  turretParts.push(paint(dome, OLIVE, rng, 0.04));
   turretParts.push(cyl(0.92, 0.98, 0.24, 32, 0, 0.12, 0, OLIVE_DK, rng, {}));
   // commander cupola + hatch
   turretParts.push(cyl(0.26, 0.28, 0.16, 20, -0.3, 0.78, 0.3, OLIVE_DK, rng, {}));
