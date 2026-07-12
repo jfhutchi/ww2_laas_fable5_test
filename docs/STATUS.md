@@ -36,6 +36,8 @@ Performance (high preset, RTX-class, 1080p headless): ~5.5–9.1 M tris, 130–1
 
 Closed on a CPU-only rig (WebGPU over SwiftShader, headed Xvfb) — see DELTA.md for the full ledger. Highlights: two real WebGPU spec violations fixed (r16float storage 3D textures + late instanceColor) that blacked out frames / whitened smoke off desktop-Dawn; `?cam=` framing actually applied (it never was — camera API added); terrain/roads moved onto the shared detail-material law; palette truthing vs `references/` (olive meadow with worn patches, weathered roofs, darker olive drab, muted grade); human-proportioned infantry; taller lit war smoke; volumetric deck restored via CPU-baked 2D slice atlases.
 
+Battery re-verified **15/15** on the CPU-only rig itself (WebGPU over SwiftShader, ~5.5 h wall time) after the iteration-5/6 changes — including `no-errors-baseline` on the strict Vulkan validation stack.
+
 Performance note: this container renders ~4–5 fps at 1080p (software rasterizer, 4 cores) — the RTX-class numbers above still describe real-GPU behavior.
 
 ## Open blockers
