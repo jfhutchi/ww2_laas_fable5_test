@@ -9,6 +9,17 @@ Reference set:
 
 ---
 
+## Post-release iteration 8 — French town fabric: density, rows, architecture (closed)
+
+User feedback: the town should read like real French towns — much denser placement, continuous building fabric, richer building styles. Verified: typecheck/build clean, battery **15/15** twice (once for the layout, once after review fixes — pathfinding, capture-and-win and combat all survive the walled streets), ~115–125 fps. Buildings 40 → **107** (65 row members, 38 three-story, 9 shopfronts); worldHash changed as expected (layout is world content; determinism is same-seed reproducibility, which the battery re-verified).
+
+1. **Street-front rowhouse fabric** (Layout.ts): contiguous 2–3-story runs wall BOTH sides of all four arms from the crossroads out to ~118 m — party-wall butted (0.14 m seam), stepped rooflines from per-house height jitter, alley gaps every 3–7 houses (≥4.5 m so the 2.5 m nav grid keeps infantry routes), facades 1.2–2.2 m off the road edge, taller toward the square. Placement uses a new exact SAT rotated-rect test (the legacy circle test can't express legitimate adjacency) with all four corners road-clearance checked; the old core frontage loop became a detached farm belt at 124–185 m. Row members skip the per-house garden-wall boxes; `edgeAnchor` walks its standoff outward until the spot clears every footprint, so defenders can't spawn inside the next house of a run.
+2. **French architecture** (BuildingMeshes.ts): `floors: 3` with string courses at every floor line, ground-floor **shopfronts** near the square (wide display pane + tucked door + painted fascia board), gabled roof **dormers**, party-wall rules (no windows/quoins/roof-tile cantilever on attached sides, chimney stacks moved onto the shared wall), per-floor gable-end windows with a 30% blind-pignon chance, and a widened render palette (pale ochre, warm grey — inside the brick-mask/colombage vertex-color contracts) plus oxblood/chasse-green shutters.
+3. **Review pass paid off in buried geometry**: a 4-lens/19-finding adversarial workflow + hand verification found the new string courses and fascia sat INSIDE the wall piers (exterior plane is D/2, not D/2−t/2+ε) — and the same arithmetic showed the pre-existing colombage timbers had been entombed 11 cm deep since they were written. All three now sit proud of the facade; Norman half-timber is actually visible for the first time. Also fixed: dormer cap slabs peaked (Λ) instead of valleyed, dormers suppressed over street-slope damage holes.
+4. Known-good gameplay interactions: MG/PaK/infantry anchors favor the new street-front houses (first-12 selection), ruins + fire smoke land inside the rows via the existing near-center damage boost, and the reinforcement/counter-attack scripting is untouched.
+
+---
+
 ## Post-release iteration 7 — vehicles, infantry, photo leaf-card foliage (closed)
 
 User feedback after iteration 6: "like what you did with the roads and textures — now do the same to the tanks and army guys; the trees look way too fake." Verified end-to-end on RTX: typecheck/build clean, shoot/compare regenerated, battery **15/15**, ~115–125 fps @1080p high, worldHash untouched, triangles DOWN 20.4M → 15.6M (cards are far lighter than icosphere canopies). Repo textures 32 MB total. Adversarially reviewed by a 15-agent workflow before commit (three confirmed findings, all fixed — see below).

@@ -51,10 +51,16 @@ export interface BuildingSpec {
   halfD: number;
   /** Eaves height (meters); roof adds on top. */
   wallHeight: number;
-  floors: 1 | 2;
+  floors: 1 | 2 | 3;
   damage: DamageState;
   /** Deterministic per-building style seed. */
   seed: number;
+  /** Rowhouse attachment: a neighbour shares the ±X (layout-local) wall —
+   *  that side gets no windows/quoins/roof overhang (French street rows). */
+  partyNegX?: boolean;
+  partyPosX?: boolean;
+  /** Ground floor is a shopfront (wide pane + fascia board). */
+  shop?: boolean;
 }
 
 export type BarrierKind = 'stone-wall' | 'hedgerow' | 'fence';
