@@ -4,6 +4,11 @@
  * unsupported, otherwise hand off to the App conductor.
  */
 
+import '@fontsource/barlow-condensed/latin-400.css';
+import '@fontsource/barlow-condensed/latin-600.css';
+import '@fontsource/barlow-condensed/latin-700.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
 import './ui/styles.css';
 import { installHooks, reportFatal, reportProgress } from './app/Hooks.ts';
 import { parseConfig } from './app/Config.ts';

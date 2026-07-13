@@ -1,7 +1,4 @@
-/**
- * Main menu / pause menu / mission-end screen. All buttons drive real game
- * flow through the callbacks provided by App.
- */
+/** Main, pause, and mission-end field dossier. */
 
 import type { Difficulty, GraphicsPreset } from '../app/Config.ts';
 
@@ -18,19 +15,21 @@ export class Menu {
   private overlay: HTMLDivElement;
   private card: HTMLDivElement;
   private state: MenuState = 'hidden';
-  private cb: MenuCallbacks;
-  private seed: number;
-  private difficulty: Difficulty;
-  private preset: GraphicsPreset;
   private helpVisible = false;
+  private endDetail = '';
 
-  constructor(parent: HTMLElement, cb: MenuCallbacks, seed: number, difficulty: Difficulty, preset: GraphicsPreset) {
-    this.cb = cb;
-    this.seed = seed;
-    this.difficulty = difficulty;
-    this.preset = preset;
+  constructor(
+    parent: HTMLElement,
+    private cb: MenuCallbacks,
+    private seed: number,
+    private difficulty: Difficulty,
+    private preset: GraphicsPreset,
+  ) {
     this.overlay = document.createElement('div');
     this.overlay.id = 'menu-overlay';
+    this.overlay.setAttribute('role', 'dialog');
+    this.overlay.setAttribute('aria-modal', 'true');
+    this.overlay.setAttribute('aria-label', 'Operation Crossroads field dossier');
     this.card = document.createElement('div');
     this.card.id = 'menu-card';
     this.overlay.append(this.card);
@@ -67,159 +66,222 @@ export class Menu {
     this.overlay.style.display = 'none';
   }
 
-  private endDetail = '';
-
   private options(): { seed: number; difficulty: Difficulty; preset: GraphicsPreset } {
     return { seed: this.seed, difficulty: this.difficulty, preset: this.preset };
   }
 
   private render(): void {
     this.overlay.style.display = 'flex';
+    this.overlay.dataset.state = this.state;
     this.card.replaceChildren();
 
+    this.card.append(this.classificationStrip(), this.briefing(), this.reconMap());
+    if (this.state !== 'paused') this.card.append(this.configuration());
+    this.card.append(this.actions(), this.helpPanel());
+  }
+
+  private classificationStrip(): HTMLElement {
+    const strip = document.createElement('header');
+    strip.className = 'menu-classification';
+    strip.innerHTML =
+      '<span>12TH ARMY GROUP // FIELD ORDER 01</span>' +
+      '<span class="menu-classification-mark">RESTRICTED</span>' +
+      '<span>ISSUED 06.06.44 // 0430 HRS</span>';
+    return strip;
+  }
+
+  private briefing(): HTMLElement {
+    const section = document.createElement('section');
+    section.id = 'menu-dossier';
+    section.className = 'menu-briefing';
+
+    const operationCode = document.createElement('div');
+    operationCode.className = 'menu-operation-code';
+    operationCode.textContent = this.state === 'paused' ? 'COMMAND NET // HOLDING' : 'OPERATION // C-47';
+
+    const title = document.createElement('h1');
+    title.id = 'menu-title';
+    title.innerHTML = '<span>Operation</span><strong>Crossroads</strong>';
+
+    const sub = document.createElement('p');
+    sub.id = 'menu-sub';
+    if (this.state === 'paused') sub.textContent = 'Tactical situation suspended by field command';
+    else if (this.state === 'won') sub.textContent = 'Objective secured // road network open';
+    else if (this.state === 'lost') sub.textContent = 'Assault broken // sector remains contested';
+    else sub.textContent = 'Normandy, France // June 1944';
+
+    const rule = document.createElement('div');
+    rule.className = 'menu-dossier-rule';
+
+    const copy = document.createElement('p');
+    copy.className = 'menu-briefing-copy';
     if (this.state === 'won' || this.state === 'lost') {
-      const t = document.createElement('div');
-      t.id = 'menu-end-title';
-      t.classList.add(this.state);
-      t.textContent = this.state === 'won' ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED';
-      const d = document.createElement('div');
-      d.id = 'menu-end-detail';
-      d.textContent = this.endDetail;
-      this.card.append(t, d);
+      copy.textContent = this.endDetail;
     } else {
-      const t = document.createElement('div');
-      t.id = 'menu-title';
-      t.textContent = 'OPERATION CROSSROADS';
-      const s = document.createElement('div');
-      s.id = 'menu-sub';
-      s.textContent = this.state === 'paused' ? 'Paused — Normandy, June 1944' : 'Normandy · June 1944';
-      this.card.append(t, s);
+      copy.textContent =
+        'Take a combined-arms column through the bocage, break the village defense, and hold the road junction against the northern counterattack.';
     }
 
-    if (this.state === 'main' || this.state === 'won' || this.state === 'lost') {
-      const row = document.createElement('div');
-      row.className = 'menu-row';
-      row.append(
-        this.selectField('Difficulty', ['easy', 'normal', 'hard'], this.difficulty, (v) => {
-          this.difficulty = v as Difficulty;
-        }),
-        this.selectField('Graphics', ['low', 'high', 'ultra'], this.preset, (v) => {
-          this.preset = v as GraphicsPreset;
-        }),
-        this.seedField(),
-      );
-      this.card.append(row);
-    }
+    const facts = document.createElement('dl');
+    facts.className = 'menu-facts';
+    facts.innerHTML =
+      '<div><dt>Sector</dt><dd>Ste. Mere-Eglise</dd></div>' +
+      '<div><dt>Force</dt><dd>3 Sherman / 5 infantry</dd></div>' +
+      '<div><dt>Primary</dt><dd>Village crossroads</dd></div>' +
+      '<div><dt>Weather</dt><dd>Broken cloud / low sun</dd></div>';
 
+    const status = document.createElement('div');
+    status.className = `menu-outcome ${this.state}`;
+    if (this.state === 'won') status.textContent = 'MISSION ACCOMPLISHED';
+    else if (this.state === 'lost') status.textContent = 'MISSION FAILED';
+
+    section.append(operationCode, title, sub, rule, copy, facts);
+    if (status.textContent) section.append(status);
+    return section;
+  }
+
+  private reconMap(): HTMLElement {
+    const map = document.createElement('aside');
+    map.id = 'menu-recon-map';
+    map.setAttribute('aria-label', 'Reconnaissance map of the objective area');
+    map.innerHTML = `
+      <div class="menu-map-grid"></div>
+      <svg class="menu-map-lines" viewBox="0 0 520 680" aria-hidden="true">
+        <path class="map-field" d="M-20 112 L166 76 L248 194 L86 276 Z" />
+        <path class="map-field" d="M312 20 L538 84 L486 242 L286 174 Z" />
+        <path class="map-field" d="M-24 382 L172 322 L232 478 L38 566 Z" />
+        <path class="map-field" d="M318 356 L548 294 L526 526 L356 586 Z" />
+        <path class="map-road map-road-shadow" d="M245 720 C254 586 248 492 276 364 C300 252 286 132 338 -40" />
+        <path class="map-road" d="M245 720 C254 586 248 492 276 364 C300 252 286 132 338 -40" />
+        <path class="map-road map-road-shadow" d="M-30 370 C112 354 182 370 276 364 C376 358 446 314 548 302" />
+        <path class="map-road" d="M-30 370 C112 354 182 370 276 364 C376 358 446 314 548 302" />
+        <path class="map-stream" d="M24 -20 C112 124 52 214 136 304 C224 398 132 502 206 700" />
+        <g class="map-village">
+          <rect x="238" y="306" width="42" height="30" /><rect x="292" y="318" width="58" height="24" />
+          <rect x="212" y="364" width="48" height="27" /><rect x="292" y="370" width="38" height="34" />
+          <rect x="250" y="414" width="60" height="23" /><rect x="336" y="390" width="35" height="28" />
+        </g>
+      </svg>
+      <div class="menu-objective-pulse"><span></span></div>
+      <div class="menu-map-unit player one">A</div>
+      <div class="menu-map-unit player two">B</div>
+      <div class="menu-map-unit enemy one">?</div>
+      <div class="menu-map-unit enemy two">?</div>
+      <div class="menu-map-north">N</div>
+      <div class="menu-map-coord">GRID 074 628<br>PHOTO: 04 JUN 44</div>
+      <div class="menu-map-caption"><span>OBJ CROWN</span><strong>VILLAGE CROSSROADS</strong></div>
+    `;
+    return map;
+  }
+
+  private configuration(): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'menu-configuration';
+    const heading = document.createElement('h2');
+    heading.textContent = this.state === 'main' ? 'Operation Parameters' : 'Redeployment Parameters';
+    const fields = document.createElement('div');
+    fields.className = 'menu-row';
+    fields.append(
+      this.selectField('Opposition', ['easy', 'normal', 'hard'], this.difficulty, (value) => {
+        this.difficulty = value as Difficulty;
+      }),
+      this.selectField('Field Detail', ['low', 'high', 'ultra'], this.preset, (value) => {
+        this.preset = value as GraphicsPreset;
+      }),
+      this.seedField(),
+    );
+    section.append(heading, fields);
+    return section;
+  }
+
+  private actions(): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'menu-actions';
     const isRestart = this.state === 'won' || this.state === 'lost';
     if (this.state === 'paused') {
-      this.card.append(
-        this.button('Resume', () => this.cb.onResume()),
-        this.button('Restart Mission', () => this.cb.onRestart(this.options()), true),
-        this.button('Quit to Menu', () => this.cb.onQuitToMenu(), true),
+      section.append(
+        this.button('Return to Battle', () => this.cb.onResume()),
+        this.button('Restart Operation', () => this.cb.onRestart(this.options()), true),
+        this.button('Withdraw to Menu', () => this.cb.onQuitToMenu(), true),
       );
     } else {
-      this.card.append(
-        this.button(isRestart ? 'Restart Mission' : 'Start Mission', () => {
+      section.append(
+        this.button(isRestart ? 'Redeploy Force' : 'Commence Operation', () => {
           (isRestart ? this.cb.onRestart : this.cb.onStart)(this.options());
         }),
       );
-      if (isRestart) this.card.append(this.button('Back to Menu', () => this.cb.onQuitToMenu(), true));
+      if (isRestart) section.append(this.button('Return to Briefing', () => this.cb.onQuitToMenu(), true));
     }
-
-    this.card.append(this.button('Controls / Help', () => this.toggleHelp(), true));
-    this.card.append(this.helpPanel());
+    section.append(this.button(this.helpVisible ? 'Close Field Manual' : 'Open Field Manual', () => this.toggleHelp(), true));
+    return section;
   }
 
-  private selectField(label: string, values: string[], current: string, onChange: (v: string) => void): HTMLElement {
-    const wrap = document.createElement('div');
+  private selectField(label: string, values: string[], current: string, onChange: (value: string) => void): HTMLElement {
+    const wrap = document.createElement('label');
     wrap.className = 'menu-field';
-    const l = document.createElement('label');
-    l.textContent = label;
-    const sel = document.createElement('select');
-    for (const v of values) {
-      const o = document.createElement('option');
-      o.value = v;
-      o.textContent = v.charAt(0).toUpperCase() + v.slice(1);
-      if (v === current) o.selected = true;
-      sel.append(o);
+    const name = document.createElement('span');
+    name.textContent = label;
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', label);
+    for (const value of values) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+      option.selected = value === current;
+      select.append(option);
     }
-    sel.addEventListener('change', () => onChange(sel.value));
-    wrap.append(l, sel);
+    select.addEventListener('change', () => onChange(select.value));
+    wrap.append(name, select);
     return wrap;
   }
 
   private seedField(): HTMLElement {
-    const wrap = document.createElement('div');
+    const wrap = document.createElement('label');
     wrap.className = 'menu-field';
-    const l = document.createElement('label');
-    l.textContent = 'Seed';
+    const name = document.createElement('span');
+    name.textContent = 'Map Folio';
     const input = document.createElement('input');
     input.type = 'number';
     input.value = String(this.seed);
+    input.setAttribute('aria-label', 'Map folio seed');
     input.addEventListener('change', () => {
-      const v = Number(input.value);
-      if (Number.isFinite(v)) this.seed = Math.floor(v);
+      const value = Number(input.value);
+      if (Number.isFinite(value)) this.seed = Math.floor(value);
     });
-    wrap.append(l, input);
+    wrap.append(name, input);
     return wrap;
   }
 
   private button(label: string, onClick: () => void, secondary = false): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.className = secondary ? 'menu-btn secondary' : 'menu-btn';
-    b.textContent = label;
-    b.addEventListener('click', onClick);
-    return b;
+    const button = document.createElement('button');
+    button.className = secondary ? 'menu-btn secondary' : 'menu-btn';
+    button.type = 'button';
+    button.innerHTML = `<span>${label}</span><i aria-hidden="true">${secondary ? '//' : '->'}</i>`;
+    button.addEventListener('click', onClick);
+    return button;
   }
 
   private toggleHelp(): void {
     this.helpVisible = !this.helpVisible;
-    const el = this.card.querySelector<HTMLDivElement>('#menu-help');
-    if (el) el.style.display = this.helpVisible ? 'block' : 'none';
+    this.render();
   }
 
   private helpPanel(): HTMLDivElement {
     const help = document.createElement('div');
     help.id = 'menu-help';
-    help.style.display = this.helpVisible ? 'block' : 'none';
-    const rows = (pairs: [string, string][]): string =>
-      pairs.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('');
-    // Static trusted markup only (no user input).
+    help.style.display = this.helpVisible ? 'grid' : 'none';
+    const group = (title: string, pairs: [string, string][]): string =>
+      `<section><h3>${title}</h3><table>${pairs.map(([key, value]) => `<tr><td class="k">${key}</td><td>${value}</td></tr>`).join('')}</table></section>`;
     help.innerHTML =
-      `<h3>Global</h3><table>${rows([
-        ['Tab', 'Switch tactical / direct tank control'],
-        ['Esc', 'Menu / pause'],
-        ['Space', 'Pause / unpause (tactical)'],
-        ['F3', 'Debug HUD'],
-        ['P', 'Print camera pose + seed to console'],
-        ['1–9', 'Control groups (Ctrl+n assign) / camera bookmarks'],
-      ])}</table>` +
-      `<h3>Tactical mode</h3><table>${rows([
-        ['Left click', 'Select unit'],
-        ['Shift+click', 'Add / remove from selection'],
-        ['Left drag', 'Selection rectangle'],
-        ['Right click', 'Move — on enemy: attack'],
-        ['A', 'Attack-move to point'],
-        ['G', 'Attack ground'],
-        ['S', 'Stop'],
-        ['H', 'Hold position'],
-        ['WASD / edge', 'Pan camera'],
-        ['Q / E', 'Rotate camera'],
-        ['Wheel', 'Zoom'],
-        ['Middle drag', 'Rotate / tilt camera'],
-      ])}</table>` +
-      `<h3>Tank mode</h3><table>${rows([
-        ['W / S', 'Throttle forward / reverse'],
-        ['A / D', 'Steer tracks'],
-        ['Mouse', 'Aim turret'],
-        ['Left click', 'Fire main gun'],
-        ['Right click', 'Fire machine gun'],
-        ['R', 'Reload'],
-        ['Shift', 'Overdrive'],
-        ['C', 'Camera shoulder / distance'],
-        ['Tab', 'Return to command'],
-      ])}</table>`;
+      group('Command Net', [
+        ['Tab', 'Switch tactical / tank control'], ['Esc', 'Pause dossier'], ['Space', 'Pause simulation'], ['F3', 'Diagnostics'],
+      ]) +
+      group('Tactical Desk', [
+        ['LMB', 'Select / drag force'], ['RMB', 'Move or attack contact'], ['WASD', 'Camera-relative pan'], ['Q / E', 'Orbit map'], ['Wheel', 'Altitude'], ['A / G', 'Attack move / attack ground'], ['S / H', 'Stop / hold'],
+      ]) +
+      group('Tank Station', [
+        ['W / S', 'Throttle / reverse'], ['A / D', 'Track steering'], ['Mouse', 'Traverse and elevate'], ['LMB / RMB', 'Main gun / machine gun'], ['Shift', 'Overdrive'], ['C', 'Camera station'],
+      ]);
     return help;
   }
 }

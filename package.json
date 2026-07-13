@@ -16,6 +16,8 @@
     "battery": "tsx tools/battery.ts"
   },
   "dependencies": {
+    "@fontsource/barlow-condensed": "^5.2.7",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "three": "0.184.0"
   },
   "devDependencies": {
