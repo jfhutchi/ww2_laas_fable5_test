@@ -743,9 +743,12 @@ function buildChurch(spec: BuildingSpec): Group {
   const dmg = spec.damage !== 'intact'
     ? { holeU0: 0.3, holeU1: 0.62, holeX0: -0.22, holeX1: 0.18, side: 1 }
     : null;
-  gableRoof(naveRoof, wood, D, W, H, rise, TILE_SLATE, rng, dmg, charAmount);
+  const naveRoofWood: BufferGeometry[] = [];
+  gableRoof(naveRoof, naveRoofWood, D, W, H, rise, TILE_SLATE, rng, dmg, charAmount);
   for (const g of naveRoof) g.rotateY(Math.PI / 2);
+  for (const g of naveRoofWood) g.rotateY(Math.PI / 2);
   roof.push(...naveRoof);
+  wood.push(...naveRoofWood);
   gableTri(masonry, W, rise, 0, H, 0, stone, rng);
   {
     const gbl = masonry[masonry.length - 1];

@@ -124,6 +124,118 @@ const checks: Check[] = [
         Math.abs(after.yaw - before.yaw) < 0.001 && Math.abs(after.pitch - before.pitch) < 0.001,
         `right drag rotated camera (yaw ${before.yaw} -> ${after.yaw}, pitch ${before.pitch} -> ${after.pitch})`,
       );
+
+      await page.mouse.down({ button: 'middle' });
+      await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(2)));
+      const afterHandoff = await page.evaluate(() => window.__oc.api?.getCameraPose() ?? null);
+      await page.mouse.up({ button: 'middle' });
+      assert(afterHandoff !== null, 'camera pose missing after gesture handoff');
+      assert(
+        Math.abs(afterHandoff.yaw - after.yaw) < 0.001 && Math.abs(afterHandoff.pitch - after.pitch) < 0.001,
+        `queued right-drag motion leaked into middle orbit (yaw ${after.yaw} -> ${afterHandoff.yaw}, pitch ${after.pitch} -> ${afterHandoff.pitch})`,
+      );
+
+      const panEvidence = await page.evaluate(async () => {
+        interface DebugInput {
+          keys: Set<string>;
+          moveDx: number;
+          moveDy: number;
+          pointer: { buttons: number };
+        }
+        interface DebugCamera {
+          focusX: number;
+          focusZ: number;
+          getPose(): { yaw: number };
+        }
+        interface DebugApp { input: DebugInput; tacticalCam: DebugCamera }
+        const app = (window as unknown as { __ocDebug?: { app: DebugApp } }).__ocDebug?.app;
+        if (!app || !window.__oc.settle) return null;
+        const beforeFocus = { x: app.tacticalCam.focusX, z: app.tacticalCam.focusZ };
+        const beforeYaw = app.tacticalCam.getPose().yaw + Math.PI;
+        app.input.keys.add('W');
+        app.input.pointer.buttons |= 4;
+        app.input.moveDx = 240;
+        app.input.moveDy = 0;
+        await window.__oc.settle(1);
+        app.input.keys.delete('W');
+        app.input.pointer.buttons &= ~4;
+        return {
+          dx: app.tacticalCam.focusX - beforeFocus.x,
+          dz: app.tacticalCam.focusZ - beforeFocus.z,
+          expectedX: -Math.sin(beforeYaw),
+          expectedZ: -Math.cos(beforeYaw),
+        };
+      });
+      assert(panEvidence !== null, 'camera/input debug evidence unavailable');
+      const moved = Math.hypot(panEvidence.dx, panEvidence.dz);
+      assert(moved > 0, 'simultaneous rotate-and-pan did not move the camera focus');
+      const alignment =
+        (panEvidence.dx * panEvidence.expectedX + panEvidence.dz * panEvidence.expectedZ) / moved;
+      assert(
+        alignment > 0.995,
+        `W panned ahead of the rendered view during orbit smoothing (alignment=${alignment.toFixed(3)})`,
+      );
+    },
+  },
+  {
+    id: 'damaged-church-geometry',
+    name: 'Damaged church roof rafters remain attached after nave rotation',
+    fn: async ({ page }) => {
+      await bootTo(page, { mode: 'tactical', freeze: true });
+      const evidence = await page.evaluate(() => {
+        interface Spec { kind: string; damage: string; wallHeight: number; halfW: number; halfD: number }
+        interface Attribute {
+          count: number;
+          getX(index: number): number;
+          getY(index: number): number;
+          getZ(index: number): number;
+        }
+        interface SceneObject {
+          name?: string;
+          children: SceneObject[];
+          geometry?: { getAttribute(name: string): Attribute | undefined };
+        }
+        interface DebugApp {
+          world: { model: { buildings: Spec[] }; group: SceneObject };
+        }
+        const app = (window as unknown as { __ocDebug?: { app: DebugApp } }).__ocDebug?.app;
+        if (!app) return null;
+        const index = app.world.model.buildings.findIndex((building) => building.kind === 'church');
+        const spec = app.world.model.buildings[index];
+        const root = app.world.group.children.find((child) => child.name === 'buildings');
+        const wood = root?.children[index]?.children.at(-1)?.geometry;
+        const position = wood?.getAttribute('position');
+        const color = wood?.getAttribute('color');
+        if (!spec || spec.damage === 'intact' || !position || !color) return null;
+        let count = 0;
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        for (let i = 0; i < position.count; i++) {
+          const dark = Math.max(color.getX(i), color.getY(i), color.getZ(i)) < 0.14;
+          const roofBand = position.getY(i) > spec.wallHeight + 1 &&
+            position.getY(i) < spec.wallHeight + spec.halfW * 1.2;
+          const naveBand = Math.abs(position.getZ(i)) < spec.halfD * 0.5;
+          if (!dark || !roofBand || !naveBand) continue;
+          count++;
+          minX = Math.min(minX, position.getX(i));
+          maxX = Math.max(maxX, position.getX(i));
+          minZ = Math.min(minZ, position.getZ(i));
+          maxZ = Math.max(maxZ, position.getZ(i));
+        }
+        return { count, minX, maxX, minZ, maxZ, halfW: spec.halfW, halfD: spec.halfD };
+      });
+      assert(evidence !== null, 'damaged church rafter geometry unavailable');
+      assert(evidence.count > 0, 'damaged church exposes no breach rafters');
+      assert(
+        evidence.minX > evidence.halfW * 0.3 && evidence.maxX < evidence.halfW,
+        `breach rafters detached from the rotated roof (x=${evidence.minX.toFixed(2)}..${evidence.maxX.toFixed(2)})`,
+      );
+      assert(
+        Math.max(Math.abs(evidence.minZ), Math.abs(evidence.maxZ)) < evidence.halfD * 0.5,
+        'breach rafters extend beyond the nave damage band',
+      );
     },
   },
   {
@@ -574,8 +686,6 @@ const checks: Check[] = [
     id: 'no-errors-baseline',
     name: 'No console errors / exceptions / rejections during 20s idle run',
     fn: async (ctx) => {
-      ctx.consoleErrors.length = 0;
-      ctx.pageErrors.length = 0;
       await bootTo(ctx.page, { mode: 'tactical', speed: 2 });
       await ctx.page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(600)));
       const s = await stats(ctx.page);
@@ -593,6 +703,11 @@ async function main(): Promise<void> {
     ? process.argv[process.argv.indexOf('--grep') + 1]
     : undefined;
 
+  const selected = grep ? checks.filter((c) => c.id.includes(grep) || c.name.includes(grep)) : checks;
+  if (selected.length === 0) {
+    throw new Error(`No battery checks match ${JSON.stringify(grep)}.`);
+  }
+
   const server = await ensureDevServer();
   const { browser } = await launchWebGPU();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
@@ -606,19 +721,26 @@ async function main(): Promise<void> {
   page.on('crash', () => {
     // headed Chrome auto-reloads a crashed tab → the reload "interrupts" the
     // next goto with the OLD url. Make the crash visible instead of cryptic.
-    console.error('[battery] PAGE CRASHED (renderer process died)');
+    pageErrors.push('renderer process crashed');
   });
 
   const ctx: CheckCtx = { browser, page, consoleErrors, pageErrors, seed: SEED };
 
-  const selected = grep ? checks.filter((c) => c.id.includes(grep) || c.name.includes(grep)) : checks;
   const results: { check: Check; ok: boolean; err?: string; ms: number }[] = [];
 
   for (const check of selected) {
     const t0 = Date.now();
+    const consoleStart = consoleErrors.length;
+    const pageStart = pageErrors.length;
     process.stdout.write(`[battery] ${check.id} … `);
     try {
       await check.fn(ctx);
+      const newConsoleErrors = consoleErrors.slice(consoleStart);
+      const newPageErrors = pageErrors.slice(pageStart);
+      const inPageErrors = await page.evaluate(() => window.__oc?.stats?.errors ?? []);
+      assert(newConsoleErrors.length === 0, `console errors: ${newConsoleErrors.join(' | ')}`);
+      assert(newPageErrors.length === 0, `page exceptions: ${newPageErrors.join(' | ')}`);
+      assert(inPageErrors.length === 0, `in-page error hooks caught: ${inPageErrors.join(' | ')}`);
       results.push({ check, ok: true, ms: Date.now() - t0 });
       console.log(`OK (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (e) {

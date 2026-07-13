@@ -6,7 +6,7 @@
  */
 
 import { mkdirSync } from 'node:fs';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { ensureDevServer, launchWebGPU, ocUrl } from './launch.ts';
 
 async function boot(page: Page, params: Record<string, string | number | boolean>): Promise<void> {
@@ -26,12 +26,24 @@ async function boot(page: Page, params: Record<string, string | number | boolean
 
 async function settle(page: Page, frames: number): Promise<void> {
   await page.evaluate(async (f) => {
-    if (window.__oc.settle) await window.__oc.settle(f);
+    if (!window.__oc.settle) throw new Error('settle hook unavailable');
+    await window.__oc.settle(f);
   }, frames);
 }
 
-async function shot(page: Page, path: string): Promise<void> {
+interface Diagnostics {
+  consoleErrors: string[];
+  pageErrors: string[];
+}
+
+async function shot(page: Page, path: string, diagnostics: Diagnostics): Promise<void> {
   await settle(page, 20);
+  const inPageErrors = await page.evaluate(() => window.__oc.stats?.errors ?? []);
+  if (inPageErrors.length > 0) throw new Error(`in-page errors: ${inPageErrors.join(' | ')}`);
+  if (diagnostics.pageErrors.length > 0) throw new Error(`page errors: ${diagnostics.pageErrors.join(' | ')}`);
+  if (diagnostics.consoleErrors.length > 0) {
+    throw new Error(`console errors: ${diagnostics.consoleErrors.join(' | ')}`);
+  }
   const oversizedMarkers = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>('.marker-bar')]
       .filter((element) => element.offsetParent !== null)
@@ -53,7 +65,7 @@ async function focusObjective(page: Page, dist: number, pitch?: number): Promise
     }
     const api = window.__oc.api;
     const dbg = (window as unknown as { __ocDebug?: Dbg }).__ocDebug;
-    if (!api || !dbg) return;
+    if (!api || !dbg) throw new Error('objective camera controls unavailable');
     const obj = api.objective();
     dbg.app.tacticalCam.focusOn(obj.x, obj.z + 14, d);
     if (pitch !== undefined) dbg.app.tacticalCam.pitch = pitch;
@@ -99,23 +111,29 @@ async function stageVillageTank(page: Page): Promise<void> {
 async function main(): Promise<void> {
   mkdirSync('shots/final', { recursive: true });
   const server = await ensureDevServer();
-  const { browser } = await launchWebGPU();
+  let browser: Browser | null = null;
+  try {
+  ({ browser } = await launchWebGPU());
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  page.on('pageerror', (e) => console.error('[pageerror]', e.message));
+  const diagnostics: Diagnostics = { consoleErrors: [], pageErrors: [] };
+  page.on('console', (message) => {
+    if (message.type() === 'error') diagnostics.consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => diagnostics.pageErrors.push(error.message));
 
   // 1. tactical overhead — framed on the village crossroads
   await boot(page, { mode: 'tactical', freeze: true });
   await focusObjective(page, 128, 0.78);
-  await shot(page, 'shots/final/tactical_overhead.png');
+  await shot(page, 'shots/final/tactical_overhead.png', diagnostics);
 
   // 2. third-person tank
   await boot(page, { mode: 'tank', freeze: true });
   await stageVillageTank(page);
-  await shot(page, 'shots/final/third_person_tank.png');
+  await shot(page, 'shots/final/third_person_tank.png', diagnostics);
 
   // 3. debug HUD
   await boot(page, { mode: 'tactical', freeze: true, hud: true });
-  await shot(page, 'shots/final/debug_hud.png');
+  await shot(page, 'shots/final/debug_hud.png', diagnostics);
 
   // 4. contested capture — assault the zone with a tough defense converging
   await boot(page, { mode: 'tactical' });
@@ -134,9 +152,13 @@ async function main(): Promise<void> {
     const g = await page.evaluate(() => window.__oc.stats?.game);
     if (g && (g.captureState === 'Contested' || g.captureState === 'Enemy Recapturing')) break;
   }
+  const contestedState = await page.evaluate(() => window.__oc.stats?.game?.captureState ?? null);
+  if (contestedState !== 'Contested' && contestedState !== 'Enemy Recapturing') {
+    throw new Error(`contested frame did not reach a contested state (state=${contestedState})`);
+  }
   await page.evaluate(() => window.__oc.api?.setSpeed(1));
   await focusObjective(page, 105);
-  await shot(page, 'shots/final/capture_contested.png');
+  await shot(page, 'shots/final/capture_contested.png', diagnostics);
 
   // 5. mission won
   await boot(page, { mode: 'tactical' });
@@ -168,9 +190,11 @@ async function main(): Promise<void> {
     }
     if (g.missionState === 'won') break;
   }
+  const wonState = await page.evaluate(() => window.__oc.stats?.game?.missionState ?? null);
+  if (wonState !== 'won') throw new Error(`mission-won frame did not reach victory (state=${wonState})`);
   await focusObjective(page, 110);
   await page.waitForTimeout(2200); // end screen fade-in
-  await shot(page, 'shots/final/mission_won.png');
+  await shot(page, 'shots/final/mission_won.png', diagnostics);
 
   // 6. mission lost
   await boot(page, { mode: 'tactical' });
@@ -206,12 +230,16 @@ async function main(): Promise<void> {
       });
     }
   }
+  const lostState = await page.evaluate(() => window.__oc.stats?.game?.missionState ?? null);
+  if (lostState !== 'lost') throw new Error(`mission-lost frame did not reach defeat (state=${lostState})`);
   await page.waitForTimeout(2200);
-  await shot(page, 'shots/final/mission_lost.png');
+  await shot(page, 'shots/final/mission_lost.png', diagnostics);
 
-  await browser.close();
-  server.stop();
   console.log('[final] complete');
+  } finally {
+    if (browser) await browser.close();
+    server.stop();
+  }
 }
 
 main().catch((e: unknown) => {

@@ -144,7 +144,9 @@ async function main(): Promise<void> {
     await sideBySide(ours, ref, out);
     produced++;
   }
-  if (produced === 0) throw new Error('No comparisons produced — run npm run shoot first.');
+  if (produced !== REQUIRED.length) {
+    throw new Error(`Produced ${produced}/${REQUIRED.length} required comparisons — restore every source and reference.`);
+  }
 }
 
 main().catch((e: unknown) => {

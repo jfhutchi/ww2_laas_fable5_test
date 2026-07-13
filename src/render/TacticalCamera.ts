@@ -120,8 +120,10 @@ export class TacticalCamera {
       if (input.key('Q')) this.yaw += rotSpeed * dt;
       if (input.key('E')) this.yaw -= rotSpeed * dt;
       const mm = (input.pointer.buttons & 4) !== 0;
+      // Drain every tactical frame so motion from selection/command gestures
+      // cannot be replayed when orbit ownership changes later.
+      const mv = input.takeMouseMove();
       if (mm) {
-        const mv = input.takeMouseMove();
         this.yaw -= mv.dx * 0.005;
         this.pitch = clamp(this.pitch + mv.dy * 0.004, MIN_PITCH, MAX_PITCH);
       }
@@ -143,7 +145,9 @@ export class TacticalCamera {
         }
       }
       if (strafe !== 0 || forward !== 0) {
-        const pan = cameraRelativePan(this.yaw, strafe, forward);
+        // Input follows the camera the player can currently see, not the
+        // target yaw that is still ahead of the damped rendered view.
+        const pan = cameraRelativePan(this.curYaw, strafe, forward);
         const len = Math.hypot(pan.x, pan.z);
         const s = (PAN_SPEED * this.dist * dt) / len;
         this.focusX += pan.x * s;

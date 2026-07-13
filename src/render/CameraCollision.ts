@@ -52,7 +52,17 @@ export function clipCameraToBuildings(
     // the mathematical camera point; close facades otherwise dominate frame.
     const halfW = building.halfW + 1.25;
     const halfD = building.halfD + 1.25;
-    if (Math.abs(originX) <= halfW && Math.abs(originZ) <= halfD) continue;
+    const startsInside = Math.abs(originX) <= halfW && Math.abs(originZ) <= halfD;
+    if (startsInside) {
+      // A target may legally sit in the padding outside the physical wall.
+      // Let the eye leave through its nearest face, but never cross inward
+      // through the building from that same safety band.
+      const nearestIsX = Math.abs(originX / halfW) >= Math.abs(originZ / halfD);
+      const outwardSpeed = nearestIsX
+        ? directionX * Math.sign(originX)
+        : directionZ * Math.sign(originZ);
+      if (outwardSpeed > 0) continue;
+    }
     let enter = 0;
     let exit = 1;
 

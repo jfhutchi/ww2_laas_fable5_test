@@ -84,6 +84,8 @@ export class Input {
       this.keys.clear();
       this.pointer.buttons = 0;
       this.pointer.dragging = false;
+      this.moveDx = 0;
+      this.moveDy = 0;
     };
 
     const updatePointer = (e: MouseEvent): void => {
@@ -113,6 +115,12 @@ export class Input {
     const onMouseDown = (e: MouseEvent): void => {
       updatePointer(e);
       this.pointer.buttons |= pointerButtonMask(e.button);
+      // Orbit begins with a clean motion channel. Movement accumulated by a
+      // preceding right-button command gesture must never be replayed here.
+      if (e.button === 1) {
+        this.moveDx = 0;
+        this.moveDy = 0;
+      }
       if (e.button === 0) {
         this.downX = this.pointer.x;
         this.downY = this.pointer.y;
@@ -146,6 +154,8 @@ export class Input {
     const onContext = (e: Event): void => e.preventDefault();
     const onLockChange = (): void => {
       this.pointerLocked = document.pointerLockElement === this.el;
+      this.moveDx = 0;
+      this.moveDy = 0;
     };
 
     window.addEventListener('keydown', onKeyDown);

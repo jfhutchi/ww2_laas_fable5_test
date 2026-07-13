@@ -9,6 +9,14 @@ Reference set:
 
 ---
 
+## Codex rebuild — independent review hardening (closed)
+
+The isolated `codex/operation-crossroads-rebuild` branch received a read-only independent review after its menu, HUD, controls, hero assets, village facades, staging, atmosphere, effects, and cinematography passes. The review found a delayed input-ownership defect hidden behind an initially green test: right-drag motion could remain queued and rotate the camera when middle orbit was acquired later. New red browser proof reproduced `yaw -3.09 → -3.22`; the input channel now drains every tactical frame and resets on ownership acquisition. WASD uses rendered `curYaw`, so forward stays aligned to screen-top during damping.
+
+Direction-aware chase-camera collision now lets a target leave facade padding but blocks travel inward through axis-aligned or rotated buildings, including pitched roof volume. Damaged-church breach rafters receive the same 90° transform as nave tiles; a geometry-level browser assertion guards their attachment. Release tooling now rejects empty battery filters and incomplete comparison sets, checks runtime diagnostics after every scenario, and requires contested/won/lost states before final images are named. Fresh proof: install clean, tests/typecheck/build clean, canonical captures and all three comparisons produced, strengthened battery **19/19** in 184 s, six-state final suite clean, ~118–139 fps during canonical high-preset captures.
+
+---
+
 ## Post-release iteration 8 — French town fabric: density, rows, architecture (closed)
 
 User feedback: the town should read like real French towns — much denser placement, continuous building fabric, richer building styles. Verified: typecheck/build clean, battery **15/15** twice (once for the layout, once after review fixes — pathfinding, capture-and-win and combat all survive the walled streets), ~115–125 fps. Buildings 40 → **107** (65 row members, 38 three-story, 9 shopfronts); worldHash changed as expected (layout is world content; determinism is same-seed reproducibility, which the battery re-verified).

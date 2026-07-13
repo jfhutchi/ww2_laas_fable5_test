@@ -58,6 +58,37 @@ const leavingSafetyMargin = clipCameraToBuildings(
   () => 0,
 );
 assert.deepEqual(leavingSafetyMargin, { x: 0, y: 4, z: 10 }, 'camera may move out of a facade safety margin');
+const enteringFromSafetyMargin = clipCameraToBuildings(
+  { x: 0, y: 3, z: 6 },
+  { x: 0, y: 4, z: -10 },
+  [testBuilding],
+  () => 0,
+);
+assert.deepEqual(
+  enteringFromSafetyMargin,
+  { x: 0, y: 3, z: 6 },
+  'camera inside the safety margin may not travel inward through the building',
+);
+const rotatedBuilding = { ...testBuilding, rotation: Math.PI / 4 };
+const localToWorld = (x: number, z: number): { x: number; z: number } => ({
+  x: x * Math.cos(rotatedBuilding.rotation) - z * Math.sin(rotatedBuilding.rotation),
+  z: x * Math.sin(rotatedBuilding.rotation) + z * Math.cos(rotatedBuilding.rotation),
+});
+const rotatedAnchor = localToWorld(0, 6);
+const rotatedDesired = localToWorld(0, -10);
+const enteringRotatedSafetyMargin = clipCameraToBuildings(
+  { ...rotatedAnchor, y: 3 },
+  { ...rotatedDesired, y: 4 },
+  [rotatedBuilding],
+  () => 0,
+);
+assert.ok(
+  Math.hypot(
+    enteringRotatedSafetyMargin.x - rotatedAnchor.x,
+    enteringRotatedSafetyMargin.z - rotatedAnchor.z,
+  ) < EPS,
+  'rotated-building safety margins preserve the same inward collision rule',
+);
 const roofCollision = clipCameraToBuildings(
   { x: 0, y: 10, z: 10 },
   { x: 0, y: 10, z: -10 },

@@ -25,11 +25,11 @@ npm run typecheck    # tsc --noEmit (strict, zero any)
 npm run build        # typecheck + production bundle
 npm run shoot        # Playwright: tactical/tank/HUD screenshots → shots/
 npm run compare      # side-by-sides vs references/ → shots/compare/
-npm run battery      # 18-check gameplay + presentation verification battery
+npm run battery      # 19-check gameplay + presentation verification battery
 npx tsx tools/final-shots.ts   # full final screenshot suite → shots/final/
 ```
 
-The battery launches the real game in headless WebGPU Chromium and proves, among other things: deterministic seeds, full order-of-battle spawns, pathfinding, two-sided live fire, penetrations and wrecks, capture-state cycling, reinforcements at 50%, an actually winnable and losable mission, live minimap state, and zero console errors/exceptions/rejections.
+The battery launches the real game in headless WebGPU Chromium and proves, among other things: deterministic seeds, strict right/middle gesture ownership, camera-relative movement during orbit smoothing, attached damaged-building geometry, full order-of-battle spawns, pathfinding, two-sided live fire, penetrations and wrecks, capture-state cycling, reinforcements at 50%, an actually winnable and losable mission, live minimap state, and zero console errors/exceptions/rejections after every scenario.
 
 ## The mission — *Capture the Crossroads*
 
