@@ -17,6 +17,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
 import { detailedMaterial } from '../render/MaterialDetail.ts';
+import { survivingRoofSegments } from './RoofDamage.ts';
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
 import type { BuildingSpec, WorldModel } from '../world/WorldTypes.ts';
 import type { Ground } from '../world/Ground.ts';
@@ -224,7 +225,7 @@ function gableRoof(
   rise: number,
   tileColor: Color,
   rng: Rng,
-  damage: { holeU0: number; holeU1: number; side: number } | null,
+  damage: { holeU0: number; holeU1: number; holeX0: number; holeX1: number; side: number } | null,
   charAmount: number,
   // per-end ridge-direction overhang: party-wall ends of a rowhouse must not
   // cantilever tiles over the neighbour (default = detached 0.38 both ends)
@@ -246,35 +247,42 @@ function gableRoof(
       const s = (t0 + 0.5 / rows) * slopeLen;
       const y = baseY + Math.sin(pitch) * (slopeLen - s);
       const z = side * Math.cos(pitch) * s - side * 0.0;
-      // skip rows inside the damage hole
-      if (damage && side === damage.side && t0 > damage.holeU0 && t0 < damage.holeU1) {
-        // charred rafters instead
+      const damagedRow = damage !== null && side === damage.side && t0 > damage.holeU0 && t0 < damage.holeU1;
+      const rowC = new Color().copy(tileColor).multiplyScalar(1 + rng.range(-0.13, 0.13));
+      let spans = [{ center: rowX, width: rowW }];
+      if (damagedRow && damage) {
+        const ragged = (r % 2 === 0 ? -0.035 : 0.045) * width;
+        const holeLeft = damage.holeX0 * width - ragged;
+        const holeRight = damage.holeX1 * width + ragged;
+        spans = survivingRoofSegments(rowX - rowW / 2, rowX + rowW / 2, holeLeft, holeRight);
+        // Exposed rafters bridge only the breached portion of this course.
         if (r % 2 === 0) {
-          for (let b = -2; b <= 2; b++) {
-            box(wood, 0.09, 0.12, rowLen, (b / 5) * width * 0.8, y - 0.05, z, CHAR, rng, { mottle: 0.3 });
+          for (let b = 0; b < 4; b++) {
+            const x = holeLeft + ((b + 0.5) / 4) * (holeRight - holeLeft);
+            box(wood, 0.09, 0.12, rowLen, x, y - 0.05, z, CHAR, rng, { mottle: 0.3 });
           }
         }
-        continue;
       }
-      const rowC = new Color().copy(tileColor).multiplyScalar(1 + rng.range(-0.13, 0.13));
-      const g = new BoxGeometry(rowW, 0.055, rowLen);
-      const pos = g.attributes['position'];
-      if (pos) {
-        const colors = new Float32Array(pos.count * 3);
-        const c = new Color();
-        for (let i = 0; i < pos.count; i++) {
-          c.copy(rowC).multiplyScalar(1 + rng.range(-0.06, 0.06));
-          if (charAmount > 0) c.lerp(CHAR, charAmount * rng.range(0.3, 1));
-          colors[i * 3] = c.r;
-          colors[i * 3 + 1] = c.g;
-          colors[i * 3 + 2] = c.b;
+      for (const span of spans) {
+        const g = new BoxGeometry(span.width, 0.055, rowLen);
+        const pos = g.attributes['position'];
+        if (pos) {
+          const colors = new Float32Array(pos.count * 3);
+          const c = new Color();
+          for (let i = 0; i < pos.count; i++) {
+            c.copy(rowC).multiplyScalar(1 + rng.range(-0.06, 0.06));
+            if (charAmount > 0) c.lerp(CHAR, charAmount * rng.range(0.3, 1));
+            colors[i * 3] = c.r;
+            colors[i * 3 + 1] = c.g;
+            colors[i * 3 + 2] = c.b;
+          }
+          g.setAttribute('color', new BufferAttribute(colors, 3));
         }
-        g.setAttribute('color', new BufferAttribute(colors, 3));
+        g.rotateX(side > 0 ? pitch : -pitch);
+        g.translate(span.center, y, z);
+        roof.push(g.toNonIndexed());
+        g.dispose();
       }
-      g.rotateX(side > 0 ? pitch : -pitch);
-      g.translate(rowX, y, z);
-      roof.push(g.toNonIndexed());
-      g.dispose();
     }
   }
   // ridge caps
@@ -544,8 +552,16 @@ function buildHouse(spec: BuildingSpec): Group {
     }
     // roof — damaged: hole on one slope; party ends keep tiles off the
     // neighbour so stepped rooflines break cleanly at the shared wall
+    const holeCenter = rng.range(-0.16, 0.16);
+    const holeHalf = rng.range(0.12, 0.22);
     const dmg = damaged
-      ? { holeU0: rng.range(0.15, 0.35), holeU1: rng.range(0.55, 0.8), side: rng.chance(0.5) ? 1 : -1 }
+      ? {
+          holeU0: rng.range(0.15, 0.35),
+          holeU1: rng.range(0.55, 0.8),
+          holeX0: holeCenter - holeHalf,
+          holeX1: holeCenter + holeHalf,
+          side: rng.chance(0.5) ? 1 : -1,
+        }
       : null;
     const roofRot: BufferGeometry[] = [];
     gableRoof(roofRot, wood, W, D, H, rise, tileC, rng, dmg, charAmount, {
@@ -724,7 +740,9 @@ function buildChurch(spec: BuildingSpec): Group {
   // nave roof (ridge along Z here → build with width=D then rotate 90°)
   const rise = 0.6 * W;
   const naveRoof: BufferGeometry[] = [];
-  const dmg = spec.damage !== 'intact' ? { holeU0: 0.3, holeU1: 0.62, side: 1 } : null;
+  const dmg = spec.damage !== 'intact'
+    ? { holeU0: 0.3, holeU1: 0.62, holeX0: -0.22, holeX1: 0.18, side: 1 }
+    : null;
   gableRoof(naveRoof, wood, D, W, H, rise, TILE_SLATE, rng, dmg, charAmount);
   for (const g of naveRoof) g.rotateY(Math.PI / 2);
   roof.push(...naveRoof);
