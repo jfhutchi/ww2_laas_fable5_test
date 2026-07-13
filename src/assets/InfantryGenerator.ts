@@ -11,6 +11,7 @@ import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
+  CapsuleGeometry,
   Color,
   CylinderGeometry,
   Group,
@@ -66,6 +67,30 @@ function bx(w: number, h: number, d: number, x: number, y: number, z: number, c:
   return paint(g, c, rng);
 }
 
+function capsule(length: number, radius: number, x: number, y: number, z: number, c: Color, rng: Rng, rotZ = 0, depthScale = 1): BufferGeometry {
+  const g = new CapsuleGeometry(radius, Math.max(0.01, length - radius * 2), 5, 8);
+  g.scale(1, 1, depthScale);
+  if (rotZ) g.rotateZ(rotZ);
+  g.translate(x, y, z);
+  return paint(g, c, rng, 0.06);
+}
+
+function bodyVolume(length: number, topRadius: number, bottomRadius: number, x: number, y: number, z: number, c: Color, rng: Rng, rotZ: number, depthScale: number): BufferGeometry {
+  const g = new CylinderGeometry(topRadius, bottomRadius, length, 10, 2);
+  g.scale(0.78, 1, depthScale);
+  if (rotZ) g.rotateZ(rotZ);
+  g.translate(x, y, z);
+  return paint(g, c, rng, 0.065);
+}
+
+function ellipsoid(rx: number, ry: number, rz: number, x: number, y: number, z: number, c: Color, rng: Rng, rotZ = 0): BufferGeometry {
+  const g = new SphereGeometry(1, 10, 7);
+  g.scale(rx, ry, rz);
+  if (rotZ) g.rotateZ(rotZ);
+  g.translate(x, y, z);
+  return paint(g, c, rng, 0.055);
+}
+
 /**
  * Soldier geometry, facing +X, feet at y=0. ~230 tris.
  * Pose changes limb layout and overall height.
@@ -84,20 +109,23 @@ export function buildSoldierGeometry(side: SoldierSide, pose: SoldierPose, seed:
     hipY = 0.82;
     lean = 0.18; // advancing crouch-lean
     // legs mid-stride: thigh + calf per leg so the knee silhouette reads
-    parts.push(bx(0.13, 0.48, 0.14, 0.1, 0.62, 0.09, uniform, rng, { z: -0.22 }));
-    parts.push(bx(0.11, 0.45, 0.12, 0.16, 0.22, 0.09, uniform, rng, { z: -0.06 }));
-    parts.push(bx(0.13, 0.48, 0.14, -0.11, 0.62, -0.09, uniform, rng, { z: 0.26 }));
-    parts.push(bx(0.11, 0.45, 0.12, -0.2, 0.22, -0.09, uniform, rng, { z: 0.12 }));
+    parts.push(capsule(0.48, 0.075, 0.1, 0.62, 0.09, uniform, rng, -0.22, 0.92));
+    parts.push(capsule(0.45, 0.065, 0.16, 0.22, 0.09, uniform, rng, -0.06, 0.92));
+    parts.push(capsule(0.48, 0.075, -0.11, 0.62, -0.09, uniform, rng, 0.26, 0.92));
+    parts.push(capsule(0.45, 0.065, -0.2, 0.22, -0.09, uniform, rng, 0.12, 0.92));
+    parts.push(ellipsoid(0.17, 0.075, 0.1, 0.21, 0.055, 0.09, new Color().copy(uniform).multiplyScalar(0.55), rng, -0.08));
+    parts.push(ellipsoid(0.17, 0.075, 0.1, -0.14, 0.055, -0.09, new Color().copy(uniform).multiplyScalar(0.55), rng, 0.1));
   } else if (pose === 'kneel') {
     hipY = 0.48;
     lean = 0.12;
-    parts.push(bx(0.12, 0.5, 0.13, 0.14, 0.26, 0.1, uniform, rng, { z: -0.9 })); // forward shin
-    parts.push(bx(0.12, 0.5, 0.13, -0.16, 0.24, -0.1, uniform, rng, { z: 0.5 })); // knee down
+    parts.push(capsule(0.5, 0.07, 0.14, 0.26, 0.1, uniform, rng, -0.9, 0.92));
+    parts.push(capsule(0.5, 0.07, -0.16, 0.24, -0.1, uniform, rng, 0.5, 0.92));
+    parts.push(ellipsoid(0.17, 0.075, 0.1, 0.34, 0.08, 0.1, new Color().copy(uniform).multiplyScalar(0.55), rng, -0.15));
   } else {
     hipY = 0.16;
     lean = 1.35; // nearly flat
-    parts.push(bx(0.12, 0.7, 0.13, -0.55, 0.1, 0.1, uniform, rng, { z: 1.45 }));
-    parts.push(bx(0.12, 0.7, 0.13, -0.6, 0.1, -0.1, uniform, rng, { z: 1.42 }));
+    parts.push(capsule(0.7, 0.07, -0.55, 0.1, 0.1, uniform, rng, 1.45, 0.92));
+    parts.push(capsule(0.7, 0.07, -0.6, 0.1, -0.1, uniform, rng, 1.42, 0.92));
   }
 
   // torso: pelvis + chest stacked along the lean axis — human proportions
@@ -108,19 +136,20 @@ export function buildSoldierGeometry(side: SoldierSide, pose: SoldierPose, seed:
   const pelvisLen = torsoLen * 0.42;
   const chestLen = torsoLen * 0.62;
   parts.push(
-    bx(0.19, pelvisLen, 0.3, sinL * pelvisLen * 0.5, hipY + cosL * pelvisLen * 0.5, 0, uniform, rng, {
-      z: -lean,
-    }),
+    bodyVolume(pelvisLen, 0.15, 0.13, sinL * pelvisLen * 0.5, hipY + cosL * pelvisLen * 0.5, 0, uniform, rng, -lean, 1.05),
   );
   const tx = sinL * (pelvisLen + chestLen * 0.45);
   const ty = hipY + cosL * (pelvisLen + chestLen * 0.45);
-  parts.push(bx(0.23, chestLen, 0.38, tx, ty, 0, uniform, rng, { z: -lean }));
+  parts.push(bodyVolume(chestLen, 0.19, 0.145, tx, ty, 0, uniform, rng, -lean, 1.08));
   // pack
   parts.push(bx(0.14, 0.3, 0.28, tx - 0.19 * cosL, ty + 0.05, 0, new Color().copy(uniform).multiplyScalar(0.85), rng, { z: -lean }));
   // webbing belt breaks the uniform mid-tone
   parts.push(
     bx(0.21, 0.07, 0.32, sinL * pelvisLen, hipY + cosL * pelvisLen, 0, new Color().copy(uniform).multiplyScalar(0.7), rng, { z: -lean }),
   );
+  const webbing = new Color().copy(uniform).multiplyScalar(0.64);
+  parts.push(bx(0.1, 0.14, 0.09, tx + 0.11, ty - 0.12, 0.2, webbing, rng, { z: -lean }));
+  parts.push(bx(0.1, 0.14, 0.09, tx + 0.11, ty - 0.12, -0.2, webbing, rng, { z: -lean }));
 
   // head + helmet
   const headX = Math.sin(lean) * torsoLen + (pose === 'prone' ? 0.16 : 0.02);
@@ -141,8 +170,10 @@ export function buildSoldierGeometry(side: SoldierSide, pose: SoldierPose, seed:
 
   // arms holding rifle forward
   const armY = ty + torsoLen * 0.18;
-  parts.push(bx(0.4, 0.09, 0.1, tx + 0.26, armY, 0.15, uniform, rng, { z: -lean - 0.25 }));
-  parts.push(bx(0.38, 0.09, 0.1, tx + 0.22, armY - 0.05, -0.14, uniform, rng, { z: -lean - 0.45 }));
+  parts.push(capsule(0.4, 0.055, tx + 0.26, armY, 0.15, uniform, rng, -Math.PI / 2 - lean - 0.25, 0.9));
+  parts.push(capsule(0.38, 0.055, tx + 0.22, armY - 0.05, -0.14, uniform, rng, -Math.PI / 2 - lean - 0.45, 0.9));
+  parts.push(ellipsoid(0.065, 0.055, 0.055, tx + 0.46, armY - 0.02, 0.11, SKIN, rng));
+  parts.push(ellipsoid(0.065, 0.055, 0.055, tx + 0.4, armY - 0.09, -0.1, SKIN, rng));
 
   // rifle: wood + barrel, held across
   const rifleX = tx + 0.45;

@@ -37,7 +37,9 @@ const soldier = buildSoldierGeometry('us', 'stand', 1944);
 const soldierPositions = soldier.getAttribute('position');
 const soldierTriangles = soldier.index ? soldier.index.count / 3 : soldierPositions.count / 3;
 assert.ok(soldierTriangles > 1_200, `hero infantry silhouette is under-detailed (${soldierTriangles} triangles)`);
-const soldierSize = new Box3().setFromBufferAttribute(soldierPositions).getSize(new Vector3());
+soldier.computeBoundingBox();
+assert.ok(soldier.boundingBox, 'soldier geometry exposes measurable bounds');
+const soldierSize = soldier.boundingBox.getSize(new Vector3());
 assert.ok(soldierSize.y > 1.55 && soldierSize.y < 2, `standing infantry height is implausible (${soldierSize.y.toFixed(2)}m)`);
 
 console.log(`vehicle regressions: PASS (${Math.round(triangles)} tank / ${Math.round(soldierTriangles)} soldier triangles)`);
