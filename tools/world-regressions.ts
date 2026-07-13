@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
+import { survivingRoofSegments } from '../src/assets/RoofDamage.ts';
 import { generateLayout } from '../src/world/Layout.ts';
+
+assert.deepEqual(
+  survivingRoofSegments(-5, 5, -1.5, 1),
+  [
+    { center: -3.25, width: 3.5 },
+    { center: 3, width: 4 },
+  ],
+  'roof breaches retain tile shoulders on both sides',
+);
 
 const world = generateLayout(1944);
 const southApproachPoles = world.props.filter((prop) => prop.kind === 'pole' && prop.z > 80);
