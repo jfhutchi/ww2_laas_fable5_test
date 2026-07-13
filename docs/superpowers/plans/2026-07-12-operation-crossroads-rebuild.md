@@ -298,4 +298,3 @@ Record branch, controls, asset licenses, acceptance commands, battery count, per
 - [ ] **Step 5: Commit the release state**
 
 Run: `git add README.md docs tools/compare.ts && git commit -m "docs: publish Codex rebuild verification"`
-
