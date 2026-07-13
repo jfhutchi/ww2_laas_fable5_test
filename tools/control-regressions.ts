@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { pointerButtonMask } from '../src/core/PointerButtons.ts';
 import { TANK_CAMERA_PRESETS } from '../src/render/TankCamera.ts';
+import { clipCameraToBuildings } from '../src/render/CameraCollision.ts';
 import { cameraRelativePan } from '../src/render/TacticalPan.ts';
 
 const EPS = 1e-9;
@@ -27,5 +28,28 @@ assert.ok(chase, 'tank camera exposes a default chase preset');
 assert.ok(chase.back >= 9, 'default chase camera keeps the complete vehicle in frame');
 assert.ok(chase.up >= 3.4, 'default chase camera preserves battlefield context above the vehicle');
 assert.ok(chase.fov >= 45 && chase.fov <= 52, 'default chase lens avoids arcade-like distortion');
+
+const testBuilding = {
+  x: 0,
+  z: 0,
+  rotation: 0,
+  halfW: 5,
+  halfD: 5,
+  wallHeight: 6,
+};
+const clipped = clipCameraToBuildings(
+  { x: 0, y: 2.5, z: 10 },
+  { x: 0, y: 4, z: -10 },
+  [testBuilding],
+  () => 0,
+);
+assert.ok(clipped.z > 5.4, `camera should stop before entering a facade (z=${clipped.z.toFixed(2)})`);
+const clear = clipCameraToBuildings(
+  { x: 8, y: 3, z: 10 },
+  { x: 10, y: 4, z: 8 },
+  [testBuilding],
+  () => 0,
+);
+assert.deepEqual(clear, { x: 10, y: 4, z: 8 }, 'clear camera paths retain their requested framing');
 
 console.log('control regressions: PASS');
