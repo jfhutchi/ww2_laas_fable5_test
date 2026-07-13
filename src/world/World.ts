@@ -18,6 +18,7 @@ import { buildProps } from '../assets/PropsGenerator.ts';
 import { buildFarField } from './FarField.ts';
 import { buildSky } from '../render/Sky.ts';
 import { paintMinimap, type MinimapMaps } from './MinimapData.ts';
+import { worldContentHash } from './WorldHash.ts';
 import { buildGroundCover } from '../effects/GroundCover.ts';
 
 export class World {
@@ -89,27 +90,7 @@ export class World {
     onProgress(0.94, 'drawing the field map');
     this.minimap = paintMinimap(this.model, this.ground, 1024);
 
-    // deterministic content hash: layout entities + terrain samples
-    let h = (0x9dc5 ^ seed) >>> 0;
-    const mix = (v: number): void => {
-      h = Math.imul(h ^ (Math.round(v * 100) | 0), 0x01000193) >>> 0;
-    };
-    for (const b of this.model.buildings) {
-      mix(b.x);
-      mix(b.z);
-      mix(b.rotation);
-      mix(b.kind.length);
-    }
-    for (const s of this.model.barriers) {
-      mix(s.x0);
-      mix(s.z1);
-    }
-    for (let gz = -8; gz <= 8; gz++) {
-      for (let gx = -8; gx <= 8; gx++) {
-        mix(this.ground.height(gx * 40, gz * 40) * 10);
-      }
-    }
-    this.contentHash = h;
+    this.contentHash = worldContentHash(this.model, this.ground);
 
     onProgress(1, 'world ready');
   }

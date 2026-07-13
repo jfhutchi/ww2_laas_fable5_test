@@ -5,7 +5,7 @@
 - **WebGPU only** (three.js 0.184 `WebGPURenderer`; backend asserted after init — a silent WebGL fallback throws). Fail-loud adapter diagnostics screen before renderer construction.
 - **TypeScript strict** + `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`; zero `any` in `src/` and `tools/`.
 - **Zero external assets** — every mesh, texture (canvas-painted minimap, radial FX sprites), and sound (WebAudio synthesis) is generated in code.
-- **Determinism**: everything procedural derives from `?seed=N` via named `Rng` forks (`core/Random.ts`, splitmix32 + FNV hashing). The battery verifies same-seed reproducibility through a world content hash and cross-seed divergence.
+- **Determinism**: everything procedural derives from `?seed=N` via named `Rng` forks (`core/Random.ts`, splitmix32 + FNV hashing). The content hash covers roads, complete building state, barriers, fields, props, craters, smoke, zones, spawns, tactical anchors, and sampled terrain; pure regressions prove prop/damage mutations change it, while the WebGPU battery verifies same-seed reproducibility and cross-seed divergence.
 
 ## World generation pipeline
 

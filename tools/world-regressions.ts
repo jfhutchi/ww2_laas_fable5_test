@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { roofBreachBounds, survivingRoofSegments } from '../src/assets/RoofDamage.ts';
 import { generateLayout } from '../src/world/Layout.ts';
+import { worldContentHash } from '../src/world/WorldHash.ts';
 
 assert.deepEqual(
   survivingRoofSegments(-5, 5, -1.5, 1),
@@ -28,6 +29,32 @@ assert.ok(
 );
 
 const world = generateLayout(1944);
+const baseHash = worldContentHash(world, () => 0);
+const firstProp = world.props[0];
+assert.ok(firstProp, 'deterministic world must contain staging props');
+const changedPropWorld = {
+  ...world,
+  props: [{ ...firstProp, x: firstProp.x + 1 }, ...world.props.slice(1)],
+};
+assert.notEqual(
+  worldContentHash(changedPropWorld, () => 0),
+  baseHash,
+  'world content hash must include staging props',
+);
+const firstBuilding = world.buildings[0];
+assert.ok(firstBuilding, 'deterministic world must contain buildings');
+const changedDamageWorld = {
+  ...world,
+  buildings: [
+    { ...firstBuilding, damage: firstBuilding.damage === 'intact' ? 'damaged' as const : 'intact' as const },
+    ...world.buildings.slice(1),
+  ],
+};
+assert.notEqual(
+  worldContentHash(changedDamageWorld, () => 0),
+  baseHash,
+  'world content hash must include building damage state',
+);
 const southApproachPoles = world.props.filter((prop) => prop.kind === 'pole' && prop.z > 80);
 assert.ok(southApproachPoles.length >= 6, `southern approach lacks landmark rhythm (${southApproachPoles.length} poles)`);
 
