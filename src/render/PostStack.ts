@@ -208,12 +208,12 @@ export class PostStack {
       // ---- golden-hour grade: WB → split tone → saturation → contrast
       const LUMA = vec3(0.2126, 0.7152, 0.0722);
       const graded = Fn(() => {
-        const c = bloomed.rgb.mul(vec3(1.12, 1.0, 0.86)).toVar();
+        const c = bloomed.rgb.mul(vec3(1.06, 1.0, 0.93)).toVar();
         const lum = dot(c, LUMA).toVar();
         // cool teal shadows (richer, reaches deeper)
         c.assign(mix(c, c.mul(vec3(0.78, 0.9, 1.18)), smoothstep(0.5, 0.06, lum).mul(0.5)));
         // warm gold highlights
-        c.assign(mix(c, c.mul(vec3(1.2, 1.02, 0.78)), smoothstep(0.3, 1.1, lum).mul(0.42)));
+        c.assign(mix(c, c.mul(vec3(1.15, 1.02, 0.84)), smoothstep(0.3, 1.1, lum).mul(0.28)));
         // saturation (kept gentle — the reference reads muted, never lime)
         c.assign(mix(vec3(dot(c, LUMA)), c, float(1.07)));
         // filmic contrast around scene-linear mid-gray (per channel — see exp note)

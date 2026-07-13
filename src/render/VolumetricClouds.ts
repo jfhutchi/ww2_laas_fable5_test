@@ -91,7 +91,7 @@ const DRIFT_V = 9;
 const FADE_START = 7000;
 const FADE_END = 10000;
 /** sky-ambient contribution scale (calibrated for ACES exposure 1.18) */
-const AMBIENT_K = 0.6;
+const AMBIENT_K = 1.05;
 
 /** Dave Hoskins sinless vec2→float hash, [0,1) — stable across GPUs. */
 function hash12(p: NV2): NF {
@@ -120,8 +120,8 @@ export class VolumetricClouds {
   private readonly uFogColor = uniform(new Vector3(0.62, 0.55, 0.42));
   /** seeded fbm domain offset for the weather bake */
   private readonly uWeatherOff = uniform(new Vector2());
-  private readonly coverage = uniform(0.62);
-  private readonly density = uniform(0.85);
+  private readonly coverage = uniform(0.57);
+  private readonly density = uniform(0.72);
 
   private readonly windX: number;
   private readonly windZ: number;
@@ -139,7 +139,7 @@ export class VolumetricClouds {
 
     this.uSunToward.value.copy(sunToward).normalize();
     this.uSunRadiance.value.copy(opts?.sunRadiance ?? new Vector3(1.0, 0.8, 0.58).multiplyScalar(3.4));
-    this.uSkyAmbient.value.copy(opts?.skyAmbient ?? new Vector3(0.6, 0.68, 0.84).multiplyScalar(0.8));
+    this.uSkyAmbient.value.copy(opts?.skyAmbient ?? new Vector3(0.6, 0.68, 0.84).multiplyScalar(0.95));
 
     this.seed = seed >>> 0;
 

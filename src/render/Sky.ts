@@ -34,15 +34,15 @@ const SUN_Y = Math.sin(SUN_ELEVATION);
 const SUN_Z = Math.cos(SUN_AZIMUTH) * Math.cos(SUN_ELEVATION);
 
 // Palette (linear-ish working values; tone mapping handles the rest).
-const ZENITH_R = 0.15;
-const ZENITH_G = 0.32;
-const ZENITH_B = 0.74;
-const HORIZON_R = 0.92;
-const HORIZON_G = 0.78;
-const HORIZON_B = 0.56;
-const PEACH_R = 1.0;
-const PEACH_G = 0.84;
-const PEACH_B = 0.62;
+const ZENITH_R = 0.1;
+const ZENITH_G = 0.24;
+const ZENITH_B = 0.58;
+const HORIZON_R = 0.58;
+const HORIZON_G = 0.5;
+const HORIZON_B = 0.4;
+const PEACH_R = 0.88;
+const PEACH_G = 0.68;
+const PEACH_B = 0.46;
 
 // ------------------------------------------------------------------- dome
 
@@ -211,7 +211,7 @@ function makeCloudTexture(seed: number, variant: number): CanvasTexture {
  * VolumetricClouds deck (render/VolumetricClouds.ts) overhead — this combined
  * cloudscape is the look validated in trees-check.png (user-preferred).
  */
-const ENABLE_BILLBOARD_CLOUDS = true;
+const ENABLE_BILLBOARD_CLOUDS = false;
 
 export function buildSky(scene: Scene, seed: number): Group {
   const group = new Group();
