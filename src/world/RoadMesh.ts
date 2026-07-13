@@ -8,7 +8,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { fbm2D } from '../core/Noise.ts';
 import { hash2D } from '../core/Random.ts';
-import { lerp, smoothstep } from '../core/MathUtil.ts';
+import { clamp01, lerp, smoothstep } from '../core/MathUtil.ts';
 import { detailedMaterial } from '../render/MaterialDetail.ts';
 import type { WorldModel } from './WorldTypes.ts';
 import type { Ground } from './Ground.ts';
@@ -95,16 +95,27 @@ export function buildRoads(model: WorldModel, ground: Ground): Group {
           g = 0.44 + wear * 0.1 + macro * 0.04;
           b = 0.285 + wear * 0.07 + macro * 0.03;
         }
+        // town streets are cobbled regardless of arm kind — pavés through
+        // the bourg (the facade-side mask picks the setts photo texture from
+        // this paint), fading to the arm's own surface past the last houses
+        const townT = clamp01((125 - Math.hypot(x, z)) / 28);
+        if (townT > 0 && road.kind !== 'paved') {
+          const band = hash2D(Math.round(along / 1.1), Math.round(off * 2), seed) * 0.14;
+          r = lerp(r, 0.5 + band + wear * 0.08, townT);
+          g = lerp(g, 0.465 + band + wear * 0.075, townT);
+          b = lerp(b, 0.42 + band + wear * 0.06, townT);
+        }
         // wheel ruts at ±0.55 halves
         if (Math.abs(Math.abs(f) - 0.55) < 0.2) {
           r *= 0.68;
           g *= 0.68;
           b *= 0.7;
         }
-        // grass strip between the wheel tracks on cart roads
-        if (road.kind === 'dirt' && Math.abs(f) < 0.22) {
+        // grass strip between the wheel tracks on cart roads (never through
+        // the paved town centre)
+        if (road.kind === 'dirt' && Math.abs(f) < 0.22 && townT < 1) {
           const strip = fbm2D(x * 0.16, z * 0.16, seed ^ 0x66, 2);
-          const k = (0.3 + strip * 0.5) * (1 - Math.abs(f) / 0.22);
+          const k = (0.3 + strip * 0.5) * (1 - Math.abs(f) / 0.22) * (1 - townT);
           r = lerp(r, 0.3, k);
           g = lerp(g, 0.32, k);
           b = lerp(b, 0.17, k);
