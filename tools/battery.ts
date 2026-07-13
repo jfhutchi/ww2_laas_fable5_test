@@ -127,6 +127,31 @@ const checks: Check[] = [
     },
   },
   {
+    id: 'menu-dossier',
+    name: 'Main menu presents a responsive field-operations dossier',
+    fn: async ({ page }) => {
+      await bootTo(page, { mode: 'menu', freeze: true });
+      const evidence = await page.evaluate(() => {
+        const card = document.getElementById('menu-card');
+        const primary = document.querySelector<HTMLElement>('.menu-btn:not(.secondary)');
+        return {
+          dossier: document.getElementById('menu-dossier') !== null,
+          map: document.getElementById('menu-recon-map') !== null,
+          briefing: document.querySelector('.menu-briefing') !== null,
+          code: document.querySelector('.menu-operation-code') !== null,
+          cardDisplay: card ? getComputedStyle(card).display : '',
+          primaryVisible: primary ? getComputedStyle(primary).display !== 'none' && primary.offsetWidth > 0 : false,
+        };
+      });
+      assert(evidence.dossier, 'operations dossier missing');
+      assert(evidence.map, 'reconnaissance map missing');
+      assert(evidence.briefing, 'mission briefing missing');
+      assert(evidence.code, 'operation code missing');
+      assert(evidence.cardDisplay === 'grid', `menu card is not a grid (display=${evidence.cardDisplay})`);
+      assert(evidence.primaryVisible, 'primary mission action is not visible');
+    },
+  },
+  {
     id: 'shot-tactical',
     name: 'Tactical view screenshot captured',
     fn: async ({ page }) => {
