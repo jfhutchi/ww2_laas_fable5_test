@@ -483,8 +483,12 @@ function buildHouse(spec: BuildingSpec): Group {
 
   const rise = (isBarn ? 0.62 : 0.52) * D;
   if (!ruined) {
-    // gable end triangles
-    gableTri(masonry, D, rise, -W / 2 + t / 2, H, 0, wallC, rng);
+    // gable end triangles. Build at the origin and place ONLY via the
+    // post-rotation translate: passing the x-offset into gableTri baked it
+    // in BEFORE rotateY, which converted it into a sideways Z displacement —
+    // every house's −X gable sat half a house off-axis, poking through the
+    // roof slope (finally obvious on the tall 3-story rowhouses).
+    gableTri(masonry, D, rise, 0, H, 0, wallC, rng);
     if (masonry.length > 0) {
       const gable = masonry[masonry.length - 1];
       if (gable) gable.rotateY(Math.PI / 2), gable.translate(-W / 2 + t / 2, 0, 0);
