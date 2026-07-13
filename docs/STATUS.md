@@ -6,9 +6,9 @@ Complete playable WWII combined-arms browser game (WebGPU / three.js WebGPURende
 
 - Authored operations-dossier menu and unified tactical/armor instrumentation with responsive/focus-safe layout contracts.
 - Correct DOM button ownership: right-click commands cannot rotate immediately or leak queued motion into a later middle-orbit gesture; WASD/edge pan follows the rendered camera yaw during smoothing.
-- Rebuilt Sherman and infantry hero geometry, exterior facade woodwork, modeled shutters/doors, south-road poles/wires, objective clutter, atmosphere, smoke, and final framing.
+- Rebuilt Sherman and infantry hero geometry, exterior facade woodwork, modeled shutters/doors, south-road poles/wires, objective clutter, atmosphere, warm-start war smoke, irregular roof-breach structure, and final framing.
 - Added bounded combat overlays, formation route budgets, and third-person building collision.
-- Added pure structural regressions and browser presentation/input/geometry checks without replacing the live simulation contract; all harnesses fail closed on missing checks, missing comparisons, wrong staged states, or runtime diagnostics.
+- Added pure structural regressions and browser presentation/input/geometry checks without replacing the live simulation contract; all harnesses fail closed on missing checks, missing comparisons, wrong staged states, weak ambient staging, or runtime diagnostics.
 
 ## Phase ledger
 
@@ -32,7 +32,7 @@ npm run build     ✓
 npm run dev       ✓  (used by every harness run)
 npm run shoot     ✓  shots/tactical.png, shots/tank.png, shots/debug_hud.png
 npm run compare   ✓  shots/compare/{tactical_vs_references,tank_vs_references,laas_quality_vs_current}.png
-npm run battery   ✓  19/19 checks (fresh independent-review pass; earlier world/render passes also green)
+npm run battery   ✓  19/19 checks (exact post-polish pass: 188 s; earlier world/render/review passes also green)
 npx tsx tools/final-shots.ts ✓ shots/final/{tactical_overhead,third_person_tank,debug_hud,capture_contested,mission_won,mission_lost}.png
 ```
 

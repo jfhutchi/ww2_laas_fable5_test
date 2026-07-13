@@ -17,7 +17,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
 import { detailedMaterial } from '../render/MaterialDetail.ts';
-import { survivingRoofSegments } from './RoofDamage.ts';
+import { roofBreachBounds, survivingRoofSegments } from './RoofDamage.ts';
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
 import type { BuildingSpec, WorldModel } from '../world/WorldTypes.ts';
 import type { Ground } from '../world/Ground.ts';
@@ -42,6 +42,7 @@ const TILE_TERRACOTTA = new Color(0.44, 0.28, 0.2); // weathered — bright oran
 const TILE_SLATE = new Color(0.32, 0.33, 0.36);
 const WOOD_W = new Color(0.4, 0.33, 0.25);
 const CHAR = new Color(0.1, 0.09, 0.08);
+const BREACH_WOOD = new Color(0.24, 0.17, 0.11);
 
 // --------------------------------------------------------------- helpers
 
@@ -56,7 +57,7 @@ function box(
   z: number,
   color: Color,
   rng: Rng,
-  opts: { jitter?: number; mottle?: number; rotY?: number; char?: number } = {},
+  opts: { jitter?: number; mottle?: number; rotX?: number; rotY?: number; char?: number } = {},
 ): void {
   const g = new BoxGeometry(w, h, d);
   const jitter = opts.jitter ?? 0;
@@ -81,6 +82,7 @@ function box(
     colors[i * 3 + 2] = c.b;
   }
   g.setAttribute('color', new BufferAttribute(colors, 3));
+  if (opts.rotX) g.rotateX(opts.rotX);
   if (opts.rotY) g.rotateY(opts.rotY);
   g.translate(x, y, z);
   // merge pool mixes custom non-indexed geometry (gables, spire) — normalize
@@ -225,7 +227,7 @@ function gableRoof(
   rise: number,
   tileColor: Color,
   rng: Rng,
-  damage: { holeU0: number; holeU1: number; holeX0: number; holeX1: number; side: number } | null,
+  damage: { holeU0: number; holeU1: number; holeX0: number; holeX1: number; side: number; edgePhase: number } | null,
   charAmount: number,
   // per-end ridge-direction overhang: party-wall ends of a rowhouse must not
   // cantilever tiles over the neighbour (default = detached 0.38 both ends)
@@ -251,15 +253,37 @@ function gableRoof(
       const rowC = new Color().copy(tileColor).multiplyScalar(1 + rng.range(-0.13, 0.13));
       let spans = [{ center: rowX, width: rowW }];
       if (damagedRow && damage) {
-        const ragged = (r % 2 === 0 ? -0.035 : 0.045) * width;
-        const holeLeft = damage.holeX0 * width - ragged;
-        const holeRight = damage.holeX1 * width + ragged;
+        const { left: holeLeft, right: holeRight } = roofBreachBounds(
+          width,
+          damage.holeX0,
+          damage.holeX1,
+          r,
+          damage.edgePhase,
+        );
         spans = survivingRoofSegments(rowX - rowW / 2, rowX + rowW / 2, holeLeft, holeRight);
-        // Exposed rafters bridge only the breached portion of this course.
+        const roofPitch = side > 0 ? pitch : -pitch;
+        // Cross-battens and rafters expose a readable roof assembly beneath
+        // the missing tiles instead of a flat black cavity.
+        box(
+          wood,
+          (holeRight - holeLeft) * 0.9,
+          0.055,
+          0.07,
+          (holeLeft + holeRight) * 0.5,
+          y - 0.14,
+          z,
+          BREACH_WOOD,
+          rng,
+          { mottle: 0.22, rotX: roofPitch },
+        );
         if (r % 2 === 0) {
           for (let b = 0; b < 4; b++) {
             const x = holeLeft + ((b + 0.5) / 4) * (holeRight - holeLeft);
-            box(wood, 0.09, 0.12, rowLen, x, y - 0.05, z, CHAR, rng, { mottle: 0.3 });
+            box(wood, 0.1, 0.13, rowLen * 0.94, x, y - 0.13, z, BREACH_WOOD, rng, {
+              mottle: 0.28,
+              rotX: roofPitch,
+              char: 0.28,
+            });
           }
         }
       }
@@ -561,6 +585,7 @@ function buildHouse(spec: BuildingSpec): Group {
           holeX0: holeCenter - holeHalf,
           holeX1: holeCenter + holeHalf,
           side: rng.chance(0.5) ? 1 : -1,
+          edgePhase: rng.float(),
         }
       : null;
     const roofRot: BufferGeometry[] = [];
@@ -741,7 +766,7 @@ function buildChurch(spec: BuildingSpec): Group {
   const rise = 0.6 * W;
   const naveRoof: BufferGeometry[] = [];
   const dmg = spec.damage !== 'intact'
-    ? { holeU0: 0.3, holeU1: 0.62, holeX0: -0.22, holeX1: 0.18, side: 1 }
+    ? { holeU0: 0.3, holeU1: 0.62, holeX0: -0.22, holeX1: 0.18, side: 1, edgePhase: 0.37 }
     : null;
   const naveRoofWood: BufferGeometry[] = [];
   gableRoof(naveRoof, naveRoofWood, D, W, H, rise, TILE_SLATE, rng, dmg, charAmount);

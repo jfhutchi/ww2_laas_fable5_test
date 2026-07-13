@@ -10,6 +10,7 @@
 import { mkdirSync } from 'node:fs';
 import type { Browser, Page } from 'playwright';
 import { ensureDevServer, launchWebGPU, ocUrl } from './launch.ts';
+import { stageVillageTank } from './staging.ts';
 
 interface CheckCtx {
   browser: Browser;
@@ -205,19 +206,17 @@ const checks: Check[] = [
         const root = app.world.group.children.find((child) => child.name === 'buildings');
         const wood = root?.children[index]?.children.at(-1)?.geometry;
         const position = wood?.getAttribute('position');
-        const color = wood?.getAttribute('color');
-        if (!spec || spec.damage === 'intact' || !position || !color) return null;
+        if (!spec || spec.damage === 'intact' || !position) return null;
         let count = 0;
         let minX = Infinity;
         let maxX = -Infinity;
         let minZ = Infinity;
         let maxZ = -Infinity;
         for (let i = 0; i < position.count; i++) {
-          const dark = Math.max(color.getX(i), color.getY(i), color.getZ(i)) < 0.14;
           const roofBand = position.getY(i) > spec.wallHeight + 1 &&
             position.getY(i) < spec.wallHeight + spec.halfW * 1.2;
           const naveBand = Math.abs(position.getZ(i)) < spec.halfD * 0.5;
-          if (!dark || !roofBand || !naveBand) continue;
+          if (!roofBand || !naveBand) continue;
           count++;
           minX = Math.min(minX, position.getX(i));
           maxX = Math.max(maxX, position.getX(i));
@@ -313,6 +312,12 @@ const checks: Check[] = [
     fn: async ({ page }) => {
       await bootTo(page, { mode: 'tactical', freeze: true });
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
+      const ambientSmoke = await page.evaluate(() => {
+        interface DebugApp { fx: { smokeMesh: { count: number } } | null }
+        const app = (window as unknown as { __ocDebug?: { app: DebugApp } }).__ocDebug?.app;
+        return app?.fx?.smokeMesh.count ?? -1;
+      });
+      assert(ambientSmoke >= 60, `ambient battle smoke did not prewarm (${ambientSmoke} particles)`);
       mkdirSync('shots/battery', { recursive: true });
       await page.screenshot({ path: 'shots/battery/tactical.png', timeout: 180000 });
     },
@@ -322,6 +327,11 @@ const checks: Check[] = [
     name: 'Third-person tank screenshot captured',
     fn: async ({ page }) => {
       await bootTo(page, { mode: 'tank', freeze: true });
+      const staging = await stageVillageTank(page);
+      assert(
+        staging.objectiveDistance < 150,
+        `tank hero frame remained outside the village (${staging.objectiveDistance.toFixed(1)}m from objective)`,
+      );
       await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(12)));
       await page.screenshot({ path: 'shots/battery/tank.png', timeout: 180000 });
     },

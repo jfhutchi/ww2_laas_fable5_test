@@ -10,8 +10,9 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { ensureDevServer, launchWebGPU, ocUrl, type OcUrlOptions } from './launch.ts';
+import { stageVillageTank } from './staging.ts';
 
 interface Args {
   [k: string]: string | boolean;
@@ -46,6 +47,8 @@ export interface ShotSpec {
   settleFrames?: number;
   /** Sim-seconds to run (at given speed) before freezing for the capture. */
   runSimSeconds?: number;
+  /** Optional deterministic scene preparation after boot and before settling. */
+  prepare?: (page: Page) => Promise<unknown>;
 }
 
 export async function capture(page: Page, spec: ShotSpec, timeoutMs = 240000): Promise<string> {
@@ -88,9 +91,14 @@ export async function capture(page: Page, spec: ShotSpec, timeoutMs = 240000): P
     }, spec.runSimSeconds);
   }
 
+  if (spec.prepare) await spec.prepare(page);
+
   await page.evaluate(async (frames) => {
     if (window.__oc.settle) await window.__oc.settle(frames);
   }, spec.settleFrames ?? 24);
+
+  const inPageErrors = await page.evaluate(() => window.__oc.stats?.errors ?? []);
+  if (inPageErrors.length > 0) throw new Error(`In-page errors: ${inPageErrors.join(' | ')}`);
 
   mkdirSync(dirname(spec.out), { recursive: true });
   await page.screenshot({ path: spec.out, timeout: 180000 });
@@ -106,13 +114,18 @@ async function main(): Promise<void> {
   const seed = Number(str(args['seed']) ?? 1944);
 
   const server = await ensureDevServer();
-  const { browser } = await launchWebGPU();
+  let browser: Browser | null = null;
+  try {
+  ({ browser } = await launchWebGPU());
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
   page.on('console', (msg) => {
     const t = msg.text();
     if (t.startsWith('[oc]') || msg.type() === 'error') console.log(`[page:${msg.type()}] ${t}`);
+    if (msg.type() === 'error') consoleErrors.push(t);
   });
-  page.on('pageerror', (err) => console.error('[pageerror]', err.message));
+  page.on('pageerror', (err) => pageErrors.push(err.message));
 
   const specs: ShotSpec[] = [];
   const mode = str(args['mode']);
@@ -154,6 +167,7 @@ async function main(): Promise<void> {
         name: 'tank',
         out: 'shots/tank.png',
         url: { seed, mode: 'tank', freeze: true, debug: true },
+        prepare: stageVillageTank,
       },
       {
         name: 'debug-hud',
@@ -165,7 +179,13 @@ async function main(): Promise<void> {
 
   const allStats: Record<string, unknown> = {};
   for (const spec of specs) {
+    const consoleStart = consoleErrors.length;
+    const pageStart = pageErrors.length;
     const stats = await capture(page, spec);
+    const newConsoleErrors = consoleErrors.slice(consoleStart);
+    const newPageErrors = pageErrors.slice(pageStart);
+    if (newConsoleErrors.length > 0) throw new Error(`Console errors: ${newConsoleErrors.join(' | ')}`);
+    if (newPageErrors.length > 0) throw new Error(`Page errors: ${newPageErrors.join(' | ')}`);
     allStats[spec.name] = JSON.parse(stats) as unknown;
     console.log(`[stats:${spec.name}] ${stats}`);
   }
@@ -176,9 +196,11 @@ async function main(): Promise<void> {
     writeFileSync(statsOut, JSON.stringify(allStats, null, 2));
   }
 
-  await browser.close();
-  server.stop();
   console.log('[shoot] done');
+  } finally {
+    if (browser) await browser.close();
+    server.stop();
+  }
 }
 
 const isDirect = process.argv[1]?.replace(/\\/g, '/').endsWith('tools/shoot.ts') ?? false;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { survivingRoofSegments } from '../src/assets/RoofDamage.ts';
+import { roofBreachBounds, survivingRoofSegments } from '../src/assets/RoofDamage.ts';
 import { generateLayout } from '../src/world/Layout.ts';
 
 assert.deepEqual(
@@ -9,6 +9,22 @@ assert.deepEqual(
     { center: 3, width: 4 },
   ],
   'roof breaches retain tile shoulders on both sides',
+);
+
+const breachProfile = Array.from({ length: 6 }, (_, row) =>
+  roofBreachBounds(8, -0.2, 0.18, row, 0.47),
+);
+assert.ok(
+  new Set(breachProfile.map((bounds) => bounds.left.toFixed(3))).size >= 4,
+  'roof breach left edge must vary across tile courses',
+);
+assert.ok(
+  new Set(breachProfile.map((bounds) => bounds.right.toFixed(3))).size >= 4,
+  'roof breach right edge must vary independently across tile courses',
+);
+assert.ok(
+  breachProfile.every((bounds) => bounds.right - bounds.left > 1.5),
+  'irregular roof breach profile must retain a visible opening',
 );
 
 const world = generateLayout(1944);

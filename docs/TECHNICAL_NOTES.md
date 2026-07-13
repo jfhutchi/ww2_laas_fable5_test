@@ -25,7 +25,7 @@ Enemy AI is intel-limited: it acts on contacts its own units can see (6 s memory
 
 ## Verification harness
 
-`tools/launch.ts` probes Chromium flag sets for a WebGPU adapter (secure-context probe against the dev server, cached recipe) and auto-starts Vite. `shoot.ts` captures deterministic frames via `window.__oc` hooks (`ready/error/settle/stats`). `battery.ts` runs 19 checks driving the real game through `window.__oc.api` — genuine selection/orders/mode toggles; the only debug-only levers are health scaling and teleport staging, and even then outcomes (kills, capture, loss) are produced by the live simulation. Every check owns a console/page/in-game diagnostic gate. `final-shots.ts` proves each requested mission state before writing its six delivery frames. `compare.ts` fails unless every required side-by-side against `references/` is produced.
+`tools/launch.ts` probes Chromium flag sets for a WebGPU adapter (secure-context probe against the dev server, cached recipe) and auto-starts Vite. `shoot.ts` captures deterministic frames via `window.__oc` hooks (`ready/error/settle/stats`), stages its default tank frame on a real village road, and rejects browser/in-game diagnostics. `battery.ts` runs 19 checks driving the real game through `window.__oc.api` — genuine selection/orders/mode toggles; the only debug-only levers are health scaling and teleport staging, and even then outcomes (kills, capture, loss) are produced by the live simulation. Every check owns a console/page/in-game diagnostic gate. `final-shots.ts` proves each requested mission state before writing its six delivery frames. `compare.ts` fails unless every required side-by-side against `references/` is produced.
 
 ## Running without a GPU (SwiftShader containers)
 

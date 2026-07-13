@@ -15,6 +15,8 @@ The isolated `codex/operation-crossroads-rebuild` branch received a read-only in
 
 Direction-aware chase-camera collision now lets a target leave facade padding but blocks travel inward through axis-aligned or rotated buildings, including pitched roof volume. Damaged-church breach rafters receive the same 90° transform as nave tiles; a geometry-level browser assertion guards their attachment. Release tooling now rejects empty battery filters and incomplete comparison sets, checks runtime diagnostics after every scenario, and requires contested/won/lost states before final images are named. Fresh proof: install clean, tests/typecheck/build clean, canonical captures and all three comparisons produced, strengthened battery **19/19** in 184 s, six-state final suite clean, ~118–139 fps during canonical high-preset captures.
 
+The final ranked visual loop replaced stepped black roof cutouts with deterministic independently ragged tile-course edges and properly sloped warm-charred rafters/cross-battens. Ambient building fires now warm-start vertically stratified smoke instead of leaving the opening battlefield sterile for several seconds; the browser requires at least 60 live ambient particles at capture time. Canonical tank capture moved from the empty spawn field onto the same real village road as the delivery hero frame through one shared fail-loud staging helper. `shoot.ts` now rejects page/console/in-game errors and cleans up in `finally`. Exact post-polish proof: tests/typecheck/build clean, canonical shoot + all three comparisons clean at ~118–124 fps, full battery **19/19** in 188 s, and all six asserted final states regenerated.
+
 ---
 
 ## Post-release iteration 8 — French town fabric: density, rows, architecture (closed)

@@ -21,13 +21,16 @@ Original prompt: Preserve the final Fable 5 version on main and build a much bet
 - Added tested third-person building collision so the chase camera cannot enter facade volumes.
 - Made facade-margin collision direction-aware for axis-aligned and rotated buildings, included pitched roofs, and kept damaged-church rafters attached through nave rotation.
 - Hardened the release tools to reject empty battery selections, partial comparison sets, wrong final-shot mission states, and diagnostics from every scenario.
+- Replaced repeated black roof cutouts with deterministic irregular tile edges and sloped warm-charred rafters/battens; added a pure breach-profile regression.
+- Warm-started ambient building smoke into established battle columns and added a browser particle-floor assertion.
+- Unified canonical/final village tank staging and made screenshot capture fail closed on browser/in-game diagnostics with guaranteed cleanup.
 
 ## Current
 
-- Stable independent-review checkpoint: install, tests, typecheck, build, shoot, all three comparisons, 19/19 battery checks, and all six asserted final states pass.
-- Continue ranked visual inspection of the tactical damage silhouettes, village street frame, and live-combat readability.
+- Stable post-polish checkpoint: install, tests, typecheck, build, fail-closed shoot, all three comparisons, 19/19 battery checks, and all six asserted final states pass.
+- Final branch/history/main-preservation audit and handoff preparation.
 
 ## Next
 
-- Refine the highest-impact remaining visual defect without changing the deterministic gameplay contract.
-- Re-run focused proof, then the complete release gate before the final branch/status handoff.
+- Confirm the original `main` worktree remains byte-for-byte at the synchronized Fable 5 commit.
+- Push the final checkpoint and keep the isolated branch ready for phone/desktop testing or a later pull request.

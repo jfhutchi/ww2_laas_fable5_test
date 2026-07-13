@@ -152,7 +152,7 @@ export class CombatFX {
     const smokeMat = new MeshBasicMaterial({
       map: softTex,
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.48,
       depthWrite: false,
       fog: true,
     });
@@ -250,7 +250,7 @@ export class CombatFX {
   /** Ambient smoke columns from the world's damaged buildings. */
   addAmbientSources(sources: readonly SmokeSourceSpec[]): void {
     for (const s of sources) {
-      this.fires.push({
+      const fire: FireSource = {
         x: s.x,
         y: this.ground.height(s.x, s.z) + 4,
         z: s.z,
@@ -258,8 +258,43 @@ export class CombatFX {
         smokeAcc: 0,
         flameAcc: 0,
         ttl: 0,
-      });
+      };
+      this.fires.push(fire);
+      // The battle predates mission start: seed an established, vertically
+      // stratified column rather than making every source begin as a single
+      // ground puff and leaving first-load views visually sterile.
+      const layers = Math.round(3 + fire.strength * 5);
+      for (let i = 0; i < layers; i++) {
+        this.spawnFireSmoke(fire, 0.35 + ((i + this.rng.float()) / layers) * 7);
+      }
     }
+  }
+
+  private spawnFireSmoke(fire: FireSource, requestedAge = 0): void {
+    if (this.smoke.length >= MAX_SMOKE - 4) return;
+    const vx = this.rng.range(-0.2, 0.7);
+    const vy = this.rng.range(3.2, 5.6);
+    const vz = this.rng.range(-0.35, 0.35);
+    const ttl = this.rng.range(11, 19);
+    const age = Math.min(requestedAge, ttl * 0.72);
+    const grow = 1.5;
+    const baseSize = this.rng.range(2.6, 5.0) * (0.6 + fire.strength);
+    this.smoke.push({
+      x: fire.x + this.rng.range(-1, 1) * fire.strength + vx * age,
+      y: fire.y + vy * age,
+      z: fire.z + this.rng.range(-1, 1) * fire.strength + vz * age,
+      vx,
+      vy,
+      vz,
+      life: age,
+      ttl,
+      size: baseSize + grow * age,
+      grow,
+      r: 0.16,
+      g: 0.15,
+      b: 0.14,
+      fade: 0.9,
+    });
   }
 
   /** Visible shell tracer — called per projectile per frame by App. */
@@ -463,25 +498,7 @@ export class CombatFX {
       f.smokeAcc += dt * (1.8 + f.strength * 2.6);
       while (f.smokeAcc >= 1) {
         f.smokeAcc -= 1;
-        if (this.smoke.length < MAX_SMOKE - 4) {
-          this.smoke.push({
-            x: f.x + this.rng.range(-1, 1) * f.strength,
-            y: f.y,
-            z: f.z + this.rng.range(-1, 1) * f.strength,
-            vx: this.rng.range(-0.2, 0.7), // light easterly drift
-            vy: this.rng.range(3.2, 5.6),
-            vz: this.rng.range(-0.35, 0.35),
-            life: 0,
-            // tall war-smoke columns — the reference skyline is smoke-dominated
-            ttl: this.rng.range(11, 19),
-            size: this.rng.range(2.6, 5.0) * (0.6 + f.strength),
-            grow: 2.3,
-            // lit mid-gray — 0.15 charcoal disappeared against the ground
-            // from the tactical altitude; war smoke reads by its lit flank
-            r: 0.34, g: 0.32, b: 0.3,
-            fade: 0.8,
-          });
-        }
+        this.spawnFireSmoke(f);
       }
       f.flameAcc += dt * (3 + f.strength * 5);
       while (f.flameAcc >= 1) {
