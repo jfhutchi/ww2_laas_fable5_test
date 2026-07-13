@@ -29,7 +29,6 @@ import {
   BufferGeometry,
   Color,
   Group,
-  IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
   Quaternion,
@@ -38,12 +37,13 @@ import {
 } from 'three';
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, float, hash, instanceIndex, positionLocal, time, uniform, vec2, vec3 } from 'three/tsl';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { GraphicsPreset } from '../app/Config.ts';
 import { clamp01, lerp } from '../core/MathUtil.ts';
 import { fbm2D } from '../core/Noise.ts';
 import { hash2D, Rng } from '../core/Random.ts';
-import { detailedMaterial } from '../render/MaterialDetail.ts';
+import { detailedMaterial, leafCardMaterial } from '../render/MaterialDetail.ts';
+import type { LeafSpecies } from '../render/MaterialDetail.ts';
 import type { Ground } from '../world/Ground.ts';
 import type { PropKind, PropSpec, WorldModel } from '../world/WorldTypes.ts';
 
@@ -121,19 +121,34 @@ function applyWind(mat: MeshStandardNodeMaterial, windDir: N2): void {
 
 interface FoliageMaterials {
   bark: MeshStandardNodeMaterial;
-  leaf: MeshStandardNodeMaterial;
+  leafFor: (kind: FoliageKind) => MeshStandardNodeMaterial;
 }
 
-/** Two shared node materials (bark, leaf) with a seeded wind direction. */
+const LEAF_SPECIES: Record<FoliageKind, LeafSpecies> = {
+  'tree-oak': 'oak',
+  'tree-poplar': 'poplar',
+  'tree-apple': 'apple',
+  bush: 'bush',
+};
+
+/** Shared bark + per-species leaf-card materials with a seeded wind. */
 function makeFoliageMaterials(seed: number): FoliageMaterials {
   const ang = new Rng((seed ^ 0x33d17b) >>> 0).range(0, Math.PI * 2);
   const dirU = uniform(new Vector2(Math.cos(ang), Math.sin(ang)));
   const windDir = vec2(dirU as unknown as N2) as unknown as N2;
-  const bark = detailedMaterial('wood', { roughness: 0.94 });
-  const leaf = detailedMaterial('foliage', { roughness: 0.9 });
+  const bark = detailedMaterial('bark', { roughness: 0.94 });
   applyWind(bark, windDir);
-  applyWind(leaf, windDir);
-  return { bark, leaf };
+  const cache = new Map<FoliageKind, MeshStandardNodeMaterial>();
+  const leafFor = (kind: FoliageKind): MeshStandardNodeMaterial => {
+    let m = cache.get(kind);
+    if (!m) {
+      m = leafCardMaterial(LEAF_SPECIES[kind]);
+      applyWind(m, windDir);
+      cache.set(kind, m);
+    }
+    return m;
+  };
+  return { bark, leafFor };
 }
 
 // ----------------------------------------------------------------- helpers
@@ -392,44 +407,88 @@ interface BlobOpts {
   flexBase: number;
 }
 
-/** One displaced icosphere foliage cluster with baked colour + flex. */
+/**
+ * One leaf-card foliage cluster: alpha-tested photo cards scattered over the
+ * old blob's ellipsoid envelope. Every vertex normal is the SHELL normal
+ * (not the card plane) so the cluster still lights like a soft volume; the
+ * cards only shape the silhouette and let sky through. Colour + flex baked
+ * exactly like the blob era so canopy shading / wind keep working.
+ */
 function makeBlob(o: BlobOpts): BufferGeometry {
-  const raw = new IcosahedronGeometry(1, o.detail);
-  raw.deleteAttribute('uv');
-  raw.deleteAttribute('normal');
-  const geo = mergeVertices(raw, 1e-4);
+  const nCards = o.detail >= 3 ? 14 : o.detail === 2 ? 10 : 7;
+  const posArr = new Float32Array(nCards * 4 * 3);
+  const nrmArr = new Float32Array(nCards * 4 * 3);
+  const colArr = new Float32Array(nCards * 4 * 3);
+  const flxArr = new Float32Array(nCards * 4);
+  const uvArr = new Float32Array(nCards * 4 * 2);
+  const idx: number[] = [];
+  const h = (i: number, s: number): number => hash2D(i * 131 + s * 17, s * 29 + 7, o.seed >>> 0);
 
-  const pos = positions(geo);
-  const flex = new Float32Array(pos.count);
-  for (let i = 0; i < pos.count; i++) {
-    const px = pos.getX(i);
-    const py = pos.getY(i);
-    const pz = pos.getZ(i);
-    const n = fbm3(px * o.freq + 11.7, py * o.freq + 3.9, pz * o.freq - 5.3, o.seed);
-    const r = 1 + o.amp * (n * 2 - 1);
-    pos.setXYZ(i, px * r, py * r, pz * r);
-    // crown-top vertices flex a touch more; jitter decorrelates leaves
-    const jit = vertexHash(px * 3.1, py * 3.1, pz * 3.1, o.seed ^ 0x5afe);
-    const f = o.flexBase + py * 0.07 + jit * 0.05;
-    flex[i] = f < 0.6 ? 0.6 : f > 1 ? 1 : f;
+  const dir = new Vector3();
+  const t1 = new Vector3();
+  const t2 = new Vector3();
+  const e1 = new Vector3();
+  const e2 = new Vector3();
+  const ctr = new Vector3();
+  const v = new Vector3();
+
+  for (let c = 0; c < nCards; c++) {
+    const cosT = 2 * h(c, 1) - 1;
+    const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
+    const phi = h(c, 2) * Math.PI * 2;
+    dir.set(sinT * Math.cos(phi), cosT, sinT * Math.sin(phi));
+    const rad = 0.3 + 0.68 * Math.sqrt(h(c, 3));
+    ctr.copy(dir).multiplyScalar(rad);
+    const ref = Math.abs(dir.y) < 0.94 ? UP : X_AXIS;
+    t1.crossVectors(ref, dir).normalize();
+    t2.crossVectors(dir, t1);
+    const roll = h(c, 4) * Math.PI * 2;
+    e1.copy(t1).multiplyScalar(Math.cos(roll)).addScaledVector(t2, Math.sin(roll));
+    e2.crossVectors(dir, e1);
+    // tilt the plane a touch out of the shell for silhouette variety
+    e2.addScaledVector(dir, (h(c, 5) - 0.5) * 0.7).normalize();
+    const half = 0.52 + 0.3 * h(c, 6);
+    const cardVal = o.value * (0.86 + 0.28 * h(c, 7));
+    const rawFlex = o.flexBase + ctr.y * 0.07 + h(c, 8) * 0.05;
+    const cardFlex = rawFlex < 0.6 ? 0.6 : rawFlex > 1 ? 1 : rawFlex;
+    // random atlas mirror per card so the same scan never reads twice
+    const u0 = h(c, 9) < 0.5 ? 0 : 1;
+    const v0 = h(c, 10) < 0.5 ? 0 : 1;
+
+    const base = c * 4;
+    for (let k = 0; k < 4; k++) {
+      const sx = k === 0 || k === 3 ? -1 : 1;
+      const sy = k < 2 ? -1 : 1;
+      v.copy(ctr).addScaledVector(e1, sx * half).addScaledVector(e2, sy * half);
+      const vi = base + k;
+      posArr[vi * 3] = v.x;
+      posArr[vi * 3 + 1] = v.y;
+      posArr[vi * 3 + 2] = v.z;
+      nrmArr[vi * 3] = dir.x;
+      nrmArr[vi * 3 + 1] = dir.y;
+      nrmArr[vi * 3 + 2] = dir.z;
+      colArr[vi * 3] = o.tintR * cardVal;
+      colArr[vi * 3 + 1] = o.tintG * cardVal;
+      colArr[vi * 3 + 2] = o.tintB * cardVal;
+      flxArr[vi] = cardFlex;
+      uvArr[vi * 2] = sx < 0 ? u0 : 1 - u0;
+      uvArr[vi * 2 + 1] = sy < 0 ? v0 : 1 - v0;
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
+
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(posArr, 3));
+  geo.setAttribute('normal', new BufferAttribute(nrmArr, 3));
+  geo.setAttribute('color', new BufferAttribute(colArr, 3));
+  geo.setAttribute('flex', new BufferAttribute(flxArr, 1));
+  geo.setAttribute('uv', new BufferAttribute(uvArr, 2));
+  geo.setIndex(idx);
   const m = new Matrix4()
     .makeTranslation(o.x, o.y, o.z)
     .multiply(new Matrix4().makeRotationY(o.rotY))
     .multiply(new Matrix4().makeScale(o.sx, o.sy, o.sz));
   geo.applyMatrix4(m);
-  geo.computeVertexNormals();
-
-  const colors = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const jit = 0.9 + 0.22 * vertexHash(pos.getX(i), pos.getY(i), pos.getZ(i), o.seed ^ 0x77c1);
-    const val = o.value * jit;
-    colors[i * 3] = o.tintR * val;
-    colors[i * 3 + 1] = o.tintG * val;
-    colors[i * 3 + 2] = o.tintB * val;
-  }
-  geo.setAttribute('color', new BufferAttribute(colors, 3));
-  geo.setAttribute('flex', new BufferAttribute(flex, 1));
   return geo;
 }
 
@@ -1050,7 +1109,7 @@ export function buildFoliage(model: WorldModel, ground: Ground, preset: Graphics
       const arng = new Rng(model.seed).fork(`foliage:${kind}#${ai}`);
       const arch = buildArchetype(kind, arng, ai, preset);
       const barkMesh = new InstancedMesh(arch.bark, materials.bark, specs.length);
-      const canopyMesh = new InstancedMesh(arch.canopy, materials.leaf, specs.length);
+      const canopyMesh = new InstancedMesh(arch.canopy, materials.leafFor(kind), specs.length);
       barkMesh.name = `foliage:${kind}:${ai}:bark`;
       canopyMesh.name = `foliage:${kind}:${ai}:leaf`;
 

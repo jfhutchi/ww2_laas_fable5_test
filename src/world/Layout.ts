@@ -148,6 +148,36 @@ export function generateLayout(seed: number): WorldModel {
     return false;
   };
 
+  /** Exact rotated-rect overlap (SAT on both rects' axes). `margin` grows
+   *  (or, negative, shrinks) both rects — street rows tolerate a few cm of
+   *  corner interpenetration where the road curves. */
+  const rectsOverlap = (
+    ax: number, az: number, ahw: number, ahd: number, arot: number,
+    bx: number, bz: number, bhw: number, bhd: number, brot: number,
+    margin: number,
+  ): boolean => {
+    const ext = margin / 2;
+    for (const [cx, cz, hw, hd, rot, ox, oz, ohw, ohd, orot] of [
+      [ax, az, ahw + ext, ahd + ext, arot, bx, bz, bhw + ext, bhd + ext, brot],
+      [bx, bz, bhw + ext, bhd + ext, brot, ax, az, ahw + ext, ahd + ext, arot],
+    ] as const) {
+      const cos = Math.cos(rot);
+      const sin = Math.sin(rot);
+      const dx = ox - cx;
+      const dz = oz - cz;
+      const lx = dx * cos + dz * sin;
+      const lz = -dx * sin + dz * cos;
+      const rel = orot - rot;
+      const c = Math.abs(Math.cos(rel));
+      const s = Math.abs(Math.sin(rel));
+      // other rect's extent projected onto this rect's local axes
+      const px = ohw * c + ohd * s;
+      const pz = ohw * s + ohd * c;
+      if (Math.abs(lx) > hw + px || Math.abs(lz) > hd + pz) return false;
+    }
+    return true;
+  };
+
   const addBuilding = (
     kind: BuildingKind,
     x: number,
@@ -156,10 +186,11 @@ export function generateLayout(seed: number): WorldModel {
     hw: number,
     hd: number,
     wallHeight: number,
-    floors: 1 | 2,
+    floors: 1 | 2 | 3,
     damage: DamageState,
+    opts: { force?: boolean } = {},
   ): BuildingSpec | null => {
-    if (overlaps(x, z, hw, hd, 1.5)) return null;
+    if (!opts.force && overlaps(x, z, hw, hd, 1.5)) return null;
     const spec: BuildingSpec = {
       id: id(),
       kind,
@@ -316,41 +347,133 @@ export function generateLayout(seed: number): WorldModel {
     }
   }
 
-  // --- town core: walk each arm, place frontage buildings
+  // --- French street fabric: contiguous rowhouse runs walling both sides
+  // of every arm out of the crossroads — party walls, stepped rooflines,
+  // alley gaps every few houses, shopfronts near the square (the reference
+  // town's continuous frontage, in place of the old detached scatter).
+  {
+    const ROW_END = 118;
+    for (let a = 0; a < 4; a++) {
+      const pts = armPoints[a] ?? [];
+      const roadW = armWidths[a] ?? 5.4;
+      for (const side of [-1, 1]) {
+        let s = 17 + villageRng.range(0, 5);
+        let run = 0;
+        let runTarget = villageRng.int(3, 7);
+        let prev: BuildingSpec | null = null;
+        while (s < ROW_END) {
+          const hw = villageRng.range(2.9, 4.6); // 5.8–9.2 m street frontage
+          const mid = pointAtRadius(pts, s + hw);
+          if (!mid) break;
+          const roadDir = dirAtRadius(pts, s + hw);
+          const normal = roadDir + (Math.PI / 2) * side;
+          const hd = villageRng.range(3.9, 5.3);
+          // facades nearly flush to the street — a narrow pavement only
+          const setback = roadW / 2 + villageRng.range(1.2, 2.2) + hd;
+          const bx = mid.x + Math.cos(normal) * setback;
+          const bz = mid.z + Math.sin(normal) * setback;
+          const rot = normal + Math.PI / 2; // door faces the street
+          const rCross = Math.hypot(bx, bz);
+          // taller toward the crossroads; height jitter steps the roofline
+          const tallness = Math.max(0, 1 - Math.max(0, rCross - 34) / 80);
+          const floors: 1 | 2 | 3 = villageRng.chance(0.26 + 0.44 * tallness)
+            ? 3
+            : villageRng.chance(0.9)
+              ? 2
+              : 1;
+          const wallH = 0.5 + floors * villageRng.range(2.62, 2.85);
+          // clear the square, the parvis, every OTHER road (all 4 corners),
+          // and any earlier structure — exact rotated-rect test, because
+          // legitimate party-wall neighbours fail the coarse circle test
+          let ok = rCross > 26 && Math.hypot(bx - churchX, bz - churchZ) > 25;
+          if (ok) {
+            for (const [lx, lz] of [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]] as const) {
+              const c = rotOffset(bx, bz, lx, lz, rot);
+              if (distToAnyRoad(c.x, c.z) < 0.9) {
+                ok = false;
+                break;
+              }
+            }
+          }
+          if (ok) {
+            for (const r of placed) {
+              if (rectsOverlap(bx, bz, hw, hd, rot, r.x, r.z, r.hw, r.hd, r.rot, -0.3)) {
+                ok = false;
+                break;
+              }
+            }
+          }
+          if (!ok) {
+            prev = null;
+            run = 0;
+            runTarget = villageRng.int(3, 7);
+            s += hw * 2 + villageRng.range(3, 7);
+            continue;
+          }
+          const kind: BuildingKind = villageRng.chance(0.72) ? 'townhouse-stone' : 'townhouse-brick';
+          const spec = addBuilding(kind, bx, bz, rot, hw, hd, wallH, floors, damageFor(bx, bz), { force: true });
+          if (spec) {
+            if (rCross < 60 && floors >= 2 && villageRng.chance(0.45)) spec.shop = true;
+            if (prev) {
+              const link = (me: BuildingSpec, other: BuildingSpec): void => {
+                const dx = other.x - me.x;
+                const dz = other.z - me.z;
+                const lx = dx * Math.cos(me.rotation) + dz * Math.sin(me.rotation);
+                if (lx > 0) me.partyPosX = true;
+                else me.partyNegX = true;
+              };
+              link(spec, prev);
+              link(prev, spec);
+            }
+            prev = spec;
+            run++;
+          } else {
+            prev = null;
+          }
+          if (run >= runTarget) {
+            // alley / carriage-arch gap between runs (≥4.5 m so the 2.5 m
+            // nav grid keeps an infantry route between street and yards)
+            s += hw * 2 + villageRng.range(4.5, 9);
+            prev = null;
+            run = 0;
+            runTarget = villageRng.int(3, 7);
+          } else {
+            s += hw * 2 + 0.14; // hairline seam reads as the party-wall joint
+          }
+        }
+      }
+    }
+  }
+
+  // --- mid-ring: detached farm buildings past the row fabric
   for (let a = 0; a < 4; a++) {
     const pts = armPoints[a] ?? [];
     for (const side of [-1, 1]) {
-      let d = 56 + villageRng.range(0, 8);
-      while (d < 165) {
+      let d = 124 + villageRng.range(0, 10);
+      while (d < 185) {
         const p = pointAtRadius(pts, d);
         const roadDir = dirAtRadius(pts, d);
         if (!p) break;
-        const inCore = d < 115;
-        const kind: BuildingKind = inCore
-          ? villageRng.chance(0.55)
-            ? 'townhouse-stone'
-            : 'townhouse-brick'
-          : villageRng.chance(0.5)
-            ? 'farmhouse'
-            : villageRng.chance(0.6)
-              ? 'barn'
-              : 'shed';
+        const kind: BuildingKind = villageRng.chance(0.5)
+          ? 'farmhouse'
+          : villageRng.chance(0.6)
+            ? 'barn'
+            : 'shed';
         const hw = kind === 'barn' ? villageRng.range(5, 7) : kind === 'shed' ? villageRng.range(2.2, 3) : villageRng.range(3.6, 5.2);
         const hd = kind === 'barn' ? villageRng.range(3.6, 4.6) : kind === 'shed' ? villageRng.range(1.8, 2.6) : villageRng.range(3, 4.4);
-        const floors: 1 | 2 = kind === 'townhouse-stone' || kind === 'townhouse-brick' ? 2 : kind === 'farmhouse' && villageRng.chance(0.5) ? 2 : 1;
+        const floors: 1 | 2 = kind === 'farmhouse' && villageRng.chance(0.5) ? 2 : 1;
         const wallH = floors === 2 ? villageRng.range(5.6, 6.6) : villageRng.range(3, 3.8);
         const normal = roadDir + (Math.PI / 2) * side;
         // setback by the LONG half-extent: rotation decides which axis faces
         // the road, so the safe distance is the larger one either way
-        const setback = (armWidths[a] ?? 5.4) / 2 + Math.max(hw, hd) + villageRng.range(1.4, inCore ? 3 : 8);
+        const setback = (armWidths[a] ?? 5.4) / 2 + Math.max(hw, hd) + villageRng.range(2, 8);
         const bx = p.x + Math.cos(normal) * setback;
         const bz = p.z + Math.sin(normal) * setback;
-        // keep the crossroads square open and corners off every road
-        if (Math.hypot(bx, bz) > 24 && distToAnyRoad(bx, bz) > Math.hypot(hw, hd) + 1 && Math.hypot(bx - churchX, bz - churchZ) > 26) {
+        if (distToAnyRoad(bx, bz) > Math.hypot(hw, hd) + 1 && Math.hypot(bx - churchX, bz - churchZ) > 26) {
           const rot = normal + Math.PI / 2; // gable parallel to road, door faces road
           addBuilding(kind, bx, bz, rot, hw, hd, wallH, floors, damageFor(bx, bz));
         }
-        d += hw * 2 + villageRng.range(inCore ? 2.5 : 14, inCore ? 7 : 36);
+        d += hw * 2 + villageRng.range(12, 34);
       }
     }
   }
@@ -556,6 +679,8 @@ export function generateLayout(seed: number): WorldModel {
 
   for (const b of buildings) {
     if (b.kind !== 'townhouse-stone' && b.kind !== 'townhouse-brick' && b.kind !== 'farmhouse') continue;
+    // row members share courtyards behind the run — no per-house garden box
+    if (b.partyNegX === true || b.partyPosX === true) continue;
     if (barrierRng.chance(0.45)) continue;
     // back-garden wall behind the building
     const back = b.rotation + Math.PI;
@@ -746,26 +871,39 @@ export function generateLayout(seed: number): WorldModel {
   const playerP = pointAtRadius(southArm, 640) ?? { x: 0, z: 640 };
   const playerFacing = Math.atan2(-playerP.z, -playerP.x);
 
-  // AT gun: sited on the road shoulder, firing straight down the southern
-  // approach — the classic PaK position covering the axis of advance.
-  const atP = pointAtRadius(southArm, 96) ?? { x: 0, z: 96 };
-  const atDir = dirAtRadius(southArm, 96); // points outward (south, toward the player)
-  const atSide = damageRng.chance(0.5) ? 1 : -1;
-  const atPos = {
-    x: atP.x + Math.cos(atDir + (Math.PI / 2) * atSide) * 4.2,
-    z: atP.z + Math.sin(atDir + (Math.PI / 2) * atSide) * 4.2,
-  };
+  // AT gun: emplaced IN TOWN, covering the southern axis of advance — a gun
+  // in the square firing down the approach street is the defended-bourg
+  // classic (Carentan, Saint-Côme). The exact site varies per seed among
+  // spots that all enfilade the player's street; each is nudged off any
+  // building footprint so the crew and sandbag arc always fit.
+  const atCandidates = [
+    { x: 3.5, z: -19 }, // north rond-point edge, straight down the street
+    { x: -14, z: -9 }, // NW plaza corner, angled across the square
+    { x: 15, z: -12 }, // NE street mouth, diagonal enfilade
+  ];
+  const pick = atCandidates[damageRng.int(0, atCandidates.length - 1)] ?? { x: 3.5, z: -19 };
+  const atPos = { x: pick.x, z: pick.z };
+  for (let step = 0; step < 6 && insideAnyBuilding(atPos.x, atPos.z, 2.2); step++) {
+    // walk toward the crossroads until the emplacement footprint is clear
+    atPos.x *= 0.8;
+    atPos.z *= 0.8;
+  }
 
   // Defensive positions sit at the player-facing EDGE of buildings (outside
-  // the footprint, behind its corner cover) — never inside the walls.
+  // the footprint, behind its corner cover) — never inside the walls. With
+  // rowhouses butted along the streets the naive spot can land inside the
+  // NEXT house of the run, so walk the standoff outward until it clears.
   const edgeAnchor = (b: BuildingSpec): { x: number; z: number; facing: number } => {
     const facing = Math.atan2(playerP.z - b.z, playerP.x - b.x);
-    const standoff = Math.max(b.halfW, b.halfD) + 3.2;
-    return {
-      x: b.x + Math.cos(facing) * standoff,
-      z: b.z + Math.sin(facing) * standoff,
-      facing,
-    };
+    let standoff = Math.max(b.halfW, b.halfD) + 3.2;
+    let x = b.x + Math.cos(facing) * standoff;
+    let z = b.z + Math.sin(facing) * standoff;
+    for (let step = 0; step < 6 && insideAnyBuilding(x, z, 0.5); step++) {
+      standoff += 2.4;
+      x = b.x + Math.cos(facing) * standoff;
+      z = b.z + Math.sin(facing) * standoff;
+    }
+    return { x, z, facing };
   };
 
   // MG nests: flanking buildings/walls overlooking approaches

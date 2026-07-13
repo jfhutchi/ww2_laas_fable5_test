@@ -30,7 +30,6 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
-  OctahedronGeometry,
   Quaternion,
   Vector3,
 } from 'three';
@@ -41,7 +40,7 @@ import type { GraphicsPreset } from '../app/Config.ts';
 import { Rng, hash2D } from '../core/Random.ts';
 import { valueNoise2D } from '../core/Noise.ts';
 import { clamp01, lerp, smoothstep } from '../core/MathUtil.ts';
-import { detailedMaterial } from '../render/MaterialDetail.ts';
+import { detailedMaterial, leafCardMaterial } from '../render/MaterialDetail.ts';
 import { positionLocal, sin, time, vec3 as tslVec3 } from 'three/tsl';
 const v3 = tslVec3 as unknown as (x: unknown, y: unknown, z: unknown) => typeof positionLocal;
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
@@ -51,7 +50,9 @@ import type { MeshStandardNodeMaterial } from 'three/webgpu';
 // vertex colors (per-face weathering) × instance colors (per-piece jitter).
 
 const stoneMaterial = detailedMaterial('stone', { roughness: 0.94, metalness: 0.02 });
-const foliageMaterial = detailedMaterial('foliage', { roughness: 0.92 });
+// hedgerow crowns: alpha-tested photo leaf cards (same vocabulary as the
+// tree canopies) — solid blobs read as topiary next to the card trees
+const foliageMaterial = leafCardMaterial('bush');
 // hedgerow crowns breathe gently in the wind
 {
   const phase = positionLocal.x.mul(0.13).add(positionLocal.z.mul(0.17));
@@ -278,13 +279,73 @@ function makeStoneArchetypes(rng: Rng, tune: Tune): Bucket[] {
 function makeBlobArchetypes(rng: Rng, tune: Tune): Bucket[] {
   const out: Bucket[] = [];
   for (let i = 0; i < tune.blobArch; i++) {
-    const geo = new OctahedronGeometry(1, 1);
-    jitterVertices(geo, rng.int(1, 2 ** 30), 0.25, 0.27);
-    const flat = toFlat(geo);
-    shadeFaces(flat, rng, 0.76, 1.14, 0.34);
-    out.push(newBucket(flat));
+    out.push(newBucket(makeLeafCardCluster(rng, 9)));
   }
   return out;
+}
+
+/**
+ * Unit-envelope leaf-card cluster for hedge crowns: photo cards on a unit
+ * shell, shell normals for soft volume lighting, value-only vertex shading
+ * (hedge hue arrives via instance colors like the old blobs).
+ */
+function makeLeafCardCluster(rng: Rng, nCards: number): BufferGeometry {
+  const posArr = new Float32Array(nCards * 4 * 3);
+  const nrmArr = new Float32Array(nCards * 4 * 3);
+  const colArr = new Float32Array(nCards * 4 * 3);
+  const uvArr = new Float32Array(nCards * 4 * 2);
+  const idx: number[] = [];
+  const dir = new Vector3();
+  const t1 = new Vector3();
+  const t2 = new Vector3();
+  const e1 = new Vector3();
+  const e2 = new Vector3();
+  const ctr = new Vector3();
+  const v = new Vector3();
+  for (let c = 0; c < nCards; c++) {
+    const cosT = 2 * rng.float() - 1;
+    const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
+    const phi = rng.range(0, Math.PI * 2);
+    dir.set(sinT * Math.cos(phi), cosT, sinT * Math.sin(phi));
+    ctr.copy(dir).multiplyScalar(0.3 + 0.62 * Math.sqrt(rng.float()));
+    const ref = Math.abs(dir.y) < 0.94 ? Y_AXIS : X_AXIS;
+    t1.crossVectors(ref, dir).normalize();
+    t2.crossVectors(dir, t1);
+    const roll = rng.range(0, Math.PI * 2);
+    e1.copy(t1).multiplyScalar(Math.cos(roll)).addScaledVector(t2, Math.sin(roll));
+    e2.crossVectors(dir, e1);
+    e2.addScaledVector(dir, rng.range(-0.35, 0.35)).normalize();
+    const half = rng.range(0.55, 0.85);
+    const val = (0.78 + 0.34 * (dir.y * 0.5 + 0.5)) * rng.range(0.88, 1.1);
+    const u0 = rng.chance(0.5) ? 0 : 1;
+    const v0 = rng.chance(0.5) ? 0 : 1;
+    const base = c * 4;
+    for (let k = 0; k < 4; k++) {
+      const sx = k === 0 || k === 3 ? -1 : 1;
+      const sy = k < 2 ? -1 : 1;
+      v.copy(ctr).addScaledVector(e1, sx * half).addScaledVector(e2, sy * half);
+      const vi = base + k;
+      posArr[vi * 3] = v.x;
+      posArr[vi * 3 + 1] = v.y;
+      posArr[vi * 3 + 2] = v.z;
+      nrmArr[vi * 3] = dir.x;
+      nrmArr[vi * 3 + 1] = dir.y;
+      nrmArr[vi * 3 + 2] = dir.z;
+      colArr[vi * 3] = val;
+      colArr[vi * 3 + 1] = val;
+      colArr[vi * 3 + 2] = val;
+      uvArr[vi * 2] = sx < 0 ? u0 : 1 - u0;
+      uvArr[vi * 2 + 1] = sy < 0 ? v0 : 1 - v0;
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(posArr, 3));
+  geo.setAttribute('normal', new BufferAttribute(nrmArr, 3));
+  geo.setAttribute('color', new BufferAttribute(colArr, 3));
+  geo.setAttribute('uv', new BufferAttribute(uvArr, 2));
+  geo.setIndex(idx);
+  return geo;
 }
 
 function makeTrunkArchetype(rng: Rng): BufferGeometry {
@@ -576,8 +637,10 @@ function addHedgerow(ctx: Ctx, seg: BarrierSegment): void {
   const gapHalf = seg.broken > 0 ? seg.broken * len * 0.35 : 0;
 
   const blob = (tMid: number, lat: number, r: number, top: boolean): void => {
-    const sx = r * rngF.range(1.55, 2.3);
-    const sy = r * rngF.range(0.6, 0.85);
+    // scale spread tightened for the photo cards: the old 2.3:0.6 anisotropy
+    // was invisible on untextured blobs but smears leaf scans into streaks
+    const sx = r * rngF.range(1.35, 1.8);
+    const sy = r * rngF.range(0.7, 0.92);
     const sz = r * rngF.range(0.95, 1.35);
     const wx = seg.x0 + dirX * tMid + nX * lat;
     const wz = seg.z0 + dirZ * tMid + nZ * lat;

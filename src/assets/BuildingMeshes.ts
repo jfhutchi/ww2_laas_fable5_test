@@ -32,6 +32,10 @@ const MAT_DARK = new MeshStandardMaterial({ color: new Color(0.045, 0.04, 0.035)
 // lime plaster, a muted red brick for the occasional townhouse, terracotta tile.
 const STONE = new Color(0.72, 0.67, 0.54);
 const PLASTER = new Color(0.79, 0.74, 0.63);
+// French-street render tints — r−g kept ≤0.05 (brick-mask contract) and
+// g>0.5 (colombage gate treats them as plaster/stone finishes)
+const RENDER_OCHRE = new Color(0.76, 0.72, 0.56);
+const RENDER_GREY = new Color(0.68, 0.66, 0.61);
 const BRICK = new Color(0.52, 0.36, 0.3);
 const TILE_TERRACOTTA = new Color(0.44, 0.28, 0.2); // weathered — bright orange reads toy-like
 const TILE_SLATE = new Color(0.32, 0.33, 0.36);
@@ -199,9 +203,16 @@ function gableRoof(
   rng: Rng,
   damage: { holeU0: number; holeU1: number; side: number } | null,
   charAmount: number,
+  // per-end ridge-direction overhang: party-wall ends of a rowhouse must not
+  // cantilever tiles over the neighbour (default = detached 0.38 both ends)
+  ends: { neg?: number; pos?: number } = {},
 ): void {
   const rows = 9;
   const overhang = 0.38;
+  const ovNeg = ends.neg ?? overhang;
+  const ovPos = ends.pos ?? overhang;
+  const rowW = width + ovNeg + ovPos;
+  const rowX = (ovPos - ovNeg) / 2;
   const slopeLen = Math.hypot(depth / 2 + overhang, rise);
   const pitch = Math.atan2(rise, depth / 2 + overhang);
   for (const side of [-1, 1]) {
@@ -223,7 +234,7 @@ function gableRoof(
         continue;
       }
       const rowC = new Color().copy(tileColor).multiplyScalar(1 + rng.range(-0.13, 0.13));
-      const g = new BoxGeometry(width + overhang * 2, 0.055, rowLen);
+      const g = new BoxGeometry(rowW, 0.055, rowLen);
       const pos = g.attributes['position'];
       if (pos) {
         const colors = new Float32Array(pos.count * 3);
@@ -238,7 +249,7 @@ function gableRoof(
         g.setAttribute('color', new BufferAttribute(colors, 3));
       }
       g.rotateX(side > 0 ? pitch : -pitch);
-      g.translate(0, y, z);
+      g.translate(rowX, y, z);
       roof.push(g.toNonIndexed());
       g.dispose();
     }
@@ -269,10 +280,20 @@ function buildHouse(spec: BuildingSpec): Group {
   const isBrick = spec.kind === 'townhouse-brick';
   const isBarn = spec.kind === 'barn';
   const isShed = spec.kind === 'shed';
+  const partyNeg = spec.partyNegX === true;
+  const partyPos = spec.partyPosX === true;
+  const isRow = partyNeg || partyPos;
   // Limestone-dominant village (matches references): only a minority of the
-  // "brick" townhouses stay red brick; barns are mostly stone with some timber.
+  // "brick" townhouses stay red brick; barns are mostly stone with some
+  // timber. Townhouse renders draw from a French-street palette — cream,
+  // limestone, pale ochre, warm grey — all inside the brick-mask contract
+  // (r−g small) so the facade shader keeps plaster coursing, never brick.
   const wallC = new Color().copy(
-    isBrick && spec.seed % 5 < 2 ? BRICK : spec.kind === 'farmhouse' ? PLASTER : STONE,
+    isBrick && spec.seed % 5 < 2
+      ? BRICK
+      : spec.kind === 'farmhouse'
+        ? PLASTER
+        : rng.pick([STONE, PLASTER, RENDER_OCHRE, RENDER_GREY, STONE]),
   );
   if (spec.kind === 'farmhouse' && rng.chance(0.5)) wallC.copy(STONE);
   if (isBarn || isShed) {
@@ -285,18 +306,33 @@ function buildHouse(spec: BuildingSpec): Group {
     new Color(0.3, 0.34, 0.42),
     new Color(0.45, 0.36, 0.26),
     new Color(0.5, 0.48, 0.42),
+    new Color(0.38, 0.24, 0.2), // oxblood
+    new Color(0.2, 0.28, 0.23), // dark chasse green
   ]);
   const tileC = new Color().copy(isBarn || isShed ? TILE_SLATE : rng.chance(0.55) ? TILE_TERRACOTTA : TILE_SLATE);
 
   const t = 0.34; // wall thickness
 
+  // shopfront layout (decided once so the fascia board aligns with the pane)
+  const shop = spec.shop === true && !isBarn && !isShed;
+  const shopW = Math.min(2.9, W * 0.44);
+  const shopU = -W * 0.14;
+  const shopDoorU = W * 0.5 - Math.max(0.9, W * 0.18);
+
   // ---- openings per facade
-  const facadeOpenings = (len: number, floors: number, withDoor: boolean): WallOpening[] => {
+  const facadeOpenings = (len: number, floors: number, withDoor: boolean, isShopFront = false): WallOpening[] => {
     const out: WallOpening[] = [];
     const n = Math.max(1, Math.floor(len / 2.6));
     for (let f = 0; f < floors; f++) {
       const sill = f * (H / floors) + (f === 0 ? 0.95 : 0.8);
       const head = f * (H / floors) + (H / floors) * (f === 0 ? 0.78 : 0.72) + (f === 0 ? 0.4 : 0.45);
+      if (f === 0 && isShopFront) {
+        // wide display pane + door tucked at the run side — the French
+        // ground-floor commerce read; upper floors stay domestic
+        out.push({ u: shopU, width: shopW, sill: 0.3, head: 2.45, door: false });
+        out.push({ u: shopDoorU, width: 1.0, sill: 0, head: 2.3, door: true });
+        continue;
+      }
       for (let i = 0; i < n; i++) {
         const u = -len / 2 + ((i + 0.5) / n) * len + rng.range(-0.1, 0.1);
         if (withDoor && f === 0 && i === Math.floor(n / 2)) {
@@ -333,7 +369,7 @@ function buildHouse(spec: BuildingSpec): Group {
   } else {
     // front (+Z local), back, two gable ends
     const front: BufferGeometry[] = [];
-    wallWithOpenings(front, wood, W, H, t, facadeOpenings(W, floors, !isShed), wallC, shutterC, rng, charAmount);
+    wallWithOpenings(front, wood, W, H, t, facadeOpenings(W, floors, !isShed && !shop, shop), wallC, shutterC, rng, charAmount);
     for (const g of front) g.translate(0, 0, D / 2 - t / 2);
     masonry.push(...front);
     const back: BufferGeometry[] = [];
@@ -342,12 +378,51 @@ function buildHouse(spec: BuildingSpec): Group {
     masonry.push(...back);
     for (const side of [-1, 1]) {
       const end: BufferGeometry[] = [];
-      // gable ends get windows too (wider houses more of them) so long walls
-      // aren't blank — previously W>7 buildings had none, reading as bare boxes
-      const endOpen = isShed ? [] : facadeOpenings(D, floors, false).slice(0, W > 7 ? 3 : 1);
+      // gable ends: one window PER FLOOR (the old slice() bunched them all
+      // on the ground floor, leaving tall blank uppers) — party walls stay
+      // sealed, and some free ends stay blind (pignon aveugle, very French)
+      const isParty = side === 1 ? partyPos : partyNeg;
+      const blind = isShed || isParty || rng.chance(0.3);
+      const endOpen: WallOpening[] = [];
+      if (!blind) {
+        const perFloor = D > 8.5 ? 2 : 1;
+        for (let f = 0; f < floors; f++) {
+          const sill = f * (H / floors) + (f === 0 ? 0.95 : 0.8);
+          const head = Math.min(
+            f * (H / floors) + (H / floors) * (f === 0 ? 0.78 : 0.72) + (f === 0 ? 0.4 : 0.45),
+            H - 0.25,
+          );
+          for (let i = 0; i < perFloor; i++) {
+            const u = perFloor === 1 ? rng.range(-0.6, 0.6) : (i === 0 ? -1 : 1) * D * 0.18 + rng.range(-0.15, 0.15);
+            endOpen.push({ u, width: 0.9, sill, head, door: false });
+          }
+        }
+      }
       wallWithOpenings(end, wood, D, H, t, endOpen, wallC, shutterC, rng, charAmount);
       for (const g of end) g.rotateY((Math.PI / 2) * side), g.translate((W / 2 - t / 2) * side, 0, 0);
       masonry.push(...end);
+    }
+    // string courses: a thin proud band at every floor line on street/back
+    // facades — the horizontal articulation French rowhouses live by.
+    // (Wall piers span to ±t/2 around the wall centre at D/2−t/2, so the
+    // exterior plane is exactly D/2 — bands must sit BEYOND it to show.)
+    if (!ruined && floors >= 2 && !isShed) {
+      const bandC = new Color().copy(wallC).multiplyScalar(1.14);
+      for (let f = 1; f < floors; f++) {
+        const by = f * (H / floors) + 0.32;
+        for (const zs of [1, -1]) {
+          box(masonry, W - 0.1, 0.14, 0.08, 0, by, zs * (D / 2 + 0.02), bandC, rng, { jitter: 0.006, char: charAmount });
+        }
+      }
+    }
+    // shopfront fascia: painted signboard spanning the display pane
+    if (shop && !ruined) {
+      const fasciaC = rng.pick([
+        new Color(0.14, 0.19, 0.15),
+        new Color(0.28, 0.14, 0.12),
+        new Color(0.15, 0.17, 0.22),
+      ]);
+      box(wood, shopW + 1.4, 0.44, 0.09, shopU, 2.72, D / 2 + 0.03, fasciaC, rng, { mottle: 0.08, char: charAmount });
     }
   }
 
@@ -355,6 +430,7 @@ function buildHouse(spec: BuildingSpec): Group {
   box(masonry, W - t * 2.2, ruined ? H * 0.4 : H, D - t * 2.2, 0, (ruined ? H * 0.4 : H) / 2, 0, new Color(0.05, 0.045, 0.04), rng, { mottle: 0.1 });
 
   // facade relief — quoins: alternating proud corner blocks on masonry
+  // (party-wall corners are shared with the neighbour — no quoins there)
   if (!isBarn && !isShed && !ruined) {
     const quoinC = new Color().copy(wallC).multiplyScalar(1.18);
     for (const [cxs, czs] of [
@@ -363,6 +439,7 @@ function buildHouse(spec: BuildingSpec): Group {
       [1, 1],
       [-1, 1],
     ] as const) {
+      if ((cxs === 1 && partyPos) || (cxs === -1 && partyNeg)) continue;
       const courses = Math.floor(H / 0.42);
       for (let q = 0; q < courses; q++) {
         const big = q % 2 === 0;
@@ -382,12 +459,16 @@ function buildHouse(spec: BuildingSpec): Group {
     }
   }
 
-  // Norman colombage: dark timber framing on plaster facades
+  // Norman colombage: dark timber framing on plaster facades. Street rows
+  // use it sparingly (most French town frontage is smooth render), and a
+  // shopfront never gets posts striping across its display pane.
   const isPlasterFacade = !isBrick && !isBarn && !isShed && wallC.g > 0.5;
-  if (isPlasterFacade && !ruined && rng.chance(0.75)) {
+  if (isPlasterFacade && !ruined && rng.chance(isRow ? 0.3 : 0.75)) {
     const timberC = new Color(0.21, 0.16, 0.11);
-    for (const side of [-1, 1]) {
-      const zOff = (D / 2 - t / 2 + 0.035) * side;
+    for (const side of shop ? [-1] : [-1, 1]) {
+      // beyond the exterior plane at ±D/2 (the old −t/2+0.035 offset left
+      // the timbers entombed 11 cm INSIDE the piers — never visible)
+      const zOff = (D / 2 + 0.025) * side;
       const nPosts = Math.max(3, Math.floor(W / 1.4));
       for (let i = 0; i <= nPosts; i++) {
         const u = -W / 2 + (i / nPosts) * W;
@@ -402,8 +483,12 @@ function buildHouse(spec: BuildingSpec): Group {
 
   const rise = (isBarn ? 0.62 : 0.52) * D;
   if (!ruined) {
-    // gable end triangles
-    gableTri(masonry, D, rise, -W / 2 + t / 2, H, 0, wallC, rng);
+    // gable end triangles. Build at the origin and place ONLY via the
+    // post-rotation translate: passing the x-offset into gableTri baked it
+    // in BEFORE rotateY, which converted it into a sideways Z displacement —
+    // every house's −X gable sat half a house off-axis, poking through the
+    // roof slope (finally obvious on the tall 3-story rowhouses).
+    gableTri(masonry, D, rise, 0, H, 0, wallC, rng);
     if (masonry.length > 0) {
       const gable = masonry[masonry.length - 1];
       if (gable) gable.rotateY(Math.PI / 2), gable.translate(-W / 2 + t / 2, 0, 0);
@@ -413,19 +498,62 @@ function buildHouse(spec: BuildingSpec): Group {
       const gable = masonry[masonry.length - 1];
       if (gable) gable.rotateY(-Math.PI / 2), gable.translate(W / 2 - t / 2, 0, 0);
     }
-    // roof — damaged: hole on one slope
+    // roof — damaged: hole on one slope; party ends keep tiles off the
+    // neighbour so stepped rooflines break cleanly at the shared wall
     const dmg = damaged
       ? { holeU0: rng.range(0.15, 0.35), holeU1: rng.range(0.55, 0.8), side: rng.chance(0.5) ? 1 : -1 }
       : null;
     const roofRot: BufferGeometry[] = [];
-    gableRoof(roofRot, wood, W, D, H, rise, tileC, rng, dmg, charAmount);
+    gableRoof(roofRot, wood, W, D, H, rise, tileC, rng, dmg, charAmount, {
+      ...(partyNeg ? { neg: 0.05 } : {}),
+      ...(partyPos ? { pos: 0.05 } : {}),
+    });
     // roof rows were built with ridge along X — matches house (ridge along local X)
     roof.push(...roofRot);
+    // dormers on the street slope: the attic-floor read of French rowhouses
+    // (skipped when the damage hole is on this slope — no floating dormers)
+    if (!isShed && !isBarn && floors >= 2 && !(dmg && dmg.side === 1) && rng.chance(isRow ? 0.7 : 0.4)) {
+      const overhang = 0.38;
+      const slopeLen = Math.hypot(D / 2 + overhang, rise);
+      const pitch = Math.atan2(rise, D / 2 + overhang);
+      const nDorm = W > 7.4 && rng.chance(0.6) ? 2 : 1;
+      for (let dIdx = 0; dIdx < nDorm; dIdx++) {
+        const xd = nDorm === 1 ? rng.range(-W * 0.18, W * 0.18) : (dIdx === 0 ? -1 : 1) * W * rng.range(0.18, 0.26);
+        const sAlong = slopeLen * rng.range(0.5, 0.62);
+        const ySurf = H + Math.sin(pitch) * (slopeLen - sAlong);
+        const zSurf = Math.cos(pitch) * sAlong;
+        // cheeked face with a small pane, capped by two tile slabs
+        box(masonry, 0.98, 1.2, 0.12, xd, ySurf + 0.48, zSurf + 0.1, wallC, rng, { jitter: 0.008, char: charAmount });
+        box(wood, 0.52, 0.66, 0.05, xd, ySurf + 0.52, zSurf + 0.17, new Color(0.1, 0.13, 0.17), rng, { mottle: 0.3 });
+        box(wood, 0.66, 0.08, 0.06, xd, ySurf + 0.92, zSurf + 0.18, new Color(0.8, 0.77, 0.69), rng, {});
+        for (const rs of [-1, 1]) {
+          const slab = new BoxGeometry(1.16, 0.05, 0.78);
+          slab.rotateX(-pitch * 0.55);
+          // negative sign: outer edge tilts DOWN so the pair peaks (Λ, not V)
+          slab.rotateZ(-rs * 0.62);
+          slab.translate(xd + rs * 0.3, ySurf + 1.22, zSurf - 0.02);
+          const posAttr = slab.getAttribute('position');
+          const cols = new Float32Array(posAttr.count * 3);
+          const cc = new Color();
+          for (let vi = 0; vi < posAttr.count; vi++) {
+            cc.copy(tileC).multiplyScalar(1 + rng.range(-0.1, 0.1));
+            if (charAmount > 0) cc.lerp(CHAR, charAmount * rng.range(0.3, 1));
+            cols[vi * 3] = cc.r;
+            cols[vi * 3 + 1] = cc.g;
+            cols[vi * 3 + 2] = cc.b;
+          }
+          slab.setAttribute('color', new BufferAttribute(cols, 3));
+          roof.push(slab.toNonIndexed());
+          slab.dispose();
+        }
+      }
+    }
     // chimney: a solid stack from the roof up to ~1.1 m proud of the ridge,
-    // with the cap sitting ON the stack top (previously the cap floated a
-    // metre above the shaft and read as a stray dark quad against the sky).
+    // with the cap sitting ON the stack top. Rowhouses stack theirs on the
+    // party wall — the classic shared-flue silhouette.
     if (!isShed && !isBarn) {
-      const cx = rng.range(-W * 0.3, W * 0.3);
+      const partySide = partyPos && partyNeg ? (rng.chance(0.5) ? 1 : -1) : partyPos ? 1 : partyNeg ? -1 : 0;
+      const cx = partySide !== 0 ? partySide * (W / 2 - 0.42) : rng.range(-W * 0.3, W * 0.3);
       const chTop = H + rise + 1.1;
       const chBot = H + 0.3;
       const chH = chTop - chBot;

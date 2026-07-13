@@ -38,6 +38,7 @@ import {
   type SoldierSide,
 } from '../assets/InfantryGenerator.ts';
 import { angleDelta } from '../core/MathUtil.ts';
+import { hash2D } from '../core/Random.ts';
 
 const POOL_SIZE = 96;
 const POSES: SoldierPose[] = ['stand', 'kneel', 'prone'];
@@ -74,6 +75,17 @@ export class UnitRenderer {
         im.receiveShadow = false;
         im.frustumCulled = false;
         im.count = 0;
+        // per-slot uniform-shade jitter breaks the clone-squad read; MUST be
+        // seeded before first render or the pipeline compiles without the
+        // instanceColor attribute (see TECHNICAL_NOTES.md)
+        const tint = new Color();
+        const poolSalt = (side === 'us' ? 0x51 : 0xa7) ^ pose.length;
+        for (let i = 0; i < POOL_SIZE; i++) {
+          const v = 0.92 + 0.16 * hash2D(i * 7 + 1, poolSalt, gs.model.seed ^ 0x501d);
+          const warm = (hash2D(i * 13 + 5, poolSalt, gs.model.seed ^ 0x77aa) - 0.5) * 0.07;
+          tint.setRGB(v * (1 + warm), v, v * (1 - warm));
+          im.setColorAt(i, tint);
+        }
         this.soldierPools.set(`${side}:${pose}`, im);
         this.root.add(im);
       }

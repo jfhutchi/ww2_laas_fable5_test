@@ -20,11 +20,16 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
+import { detailedMaterial } from '../render/MaterialDetail.ts';
 
 export type SoldierPose = 'stand' | 'kneel' | 'prone';
 export type SoldierSide = 'us' | 'de';
 
-const MAT_SOLDIER = new MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.02 });
+// Coarse-weave photo cloth (LOCAL-space Fabric066) — at tank-camera range a
+// passing soldier's chest fills hundreds of pixels and flat vertex color
+// read as painted plastic. Helmets/skin share it: at this scale the weave
+// reads as helmet-cover burlap and fatigue-worn texture, not as error.
+const MAT_SOLDIER = detailedMaterial('cloth', { roughness: 0.9, metalness: 0.02 });
 const MAT_GUNMETAL = new MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.35 });
 
 // uniforms lightened so backlit soldiers keep their read under the low
@@ -238,7 +243,7 @@ export function buildSandbagArc(seed: number): Mesh {
   return mesh;
 }
 
-function meshOfParts(parts: BufferGeometry[], mat: MeshStandardMaterial): Mesh {
+function meshOfParts(parts: BufferGeometry[], mat: Mesh['material']): Mesh {
   const merged = mergeGeometries(parts, false);
   if (!merged) throw new Error('gun merge failed');
   merged.computeVertexNormals();
