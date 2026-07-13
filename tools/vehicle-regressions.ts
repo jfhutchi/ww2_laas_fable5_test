@@ -12,6 +12,7 @@ Object.defineProperty(globalThis, 'document', {
 });
 
 const { buildSherman } = await import('../src/assets/TankGenerator.ts');
+const { buildSoldierGeometry } = await import('../src/assets/InfantryGenerator.ts');
 
 const rig = buildSherman(1944);
 for (const name of ['sherman-running-gear', 'sherman-hull', 'sherman-turret', 'sherman-main-gun']) {
@@ -28,8 +29,15 @@ rig.group.traverse((object) => {
 assert.ok(triangles > 5_000, `Sherman hero mesh is under-detailed (${triangles} triangles)`);
 
 const size = new Box3().setFromObject(rig.group).getSize(new Vector3());
-assert.ok(size.x > 7 && size.x < 10, `Sherman total length is implausible (${size.x.toFixed(2)}m)`);
+assert.ok(size.x > 6.5 && size.x < 9, `Sherman total length is implausible (${size.x.toFixed(2)}m)`);
 assert.ok(size.y > 2.6 && size.y < 4.5, `Sherman height is implausible (${size.y.toFixed(2)}m)`);
 assert.ok(size.z > 2.4 && size.z < 3.6, `Sherman width is implausible (${size.z.toFixed(2)}m)`);
 
-console.log(`vehicle regressions: PASS (${Math.round(triangles)} triangles)`);
+const soldier = buildSoldierGeometry('us', 'stand', 1944);
+const soldierPositions = soldier.getAttribute('position');
+const soldierTriangles = soldier.index ? soldier.index.count / 3 : soldierPositions.count / 3;
+assert.ok(soldierTriangles > 1_200, `hero infantry silhouette is under-detailed (${soldierTriangles} triangles)`);
+const soldierSize = new Box3().setFromBufferAttribute(soldierPositions).getSize(new Vector3());
+assert.ok(soldierSize.y > 1.55 && soldierSize.y < 2, `standing infantry height is implausible (${soldierSize.y.toFixed(2)}m)`);
+
+console.log(`vehicle regressions: PASS (${Math.round(triangles)} tank / ${Math.round(soldierTriangles)} soldier triangles)`);
