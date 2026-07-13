@@ -16,6 +16,7 @@ import { buildCloudCoverage } from '../render/CloudShadows.ts';
 import { VolumetricClouds } from '../render/VolumetricClouds.ts';
 import { TacticalCamera } from '../render/TacticalCamera.ts';
 import { TankCamera, type TankCameraTarget } from '../render/TankCamera.ts';
+import { clipCameraToBuildings } from '../render/CameraCollision.ts';
 import { DebugHud } from '../render/DebugHud.ts';
 import { Time } from '../core/Time.ts';
 import { Input } from '../core/Input.ts';
@@ -137,6 +138,8 @@ export class App {
     this.scene.add(this.world.group);
     this.tacticalCam.sampleHeight = (x, z) => this.world.sampleHeight(x, z);
     this.tankCam.sampleHeight = (x, z) => this.world.sampleHeight(x, z);
+    this.tankCam.resolveEye = (anchor, desired, out) =>
+      clipCameraToBuildings(anchor, desired, this.world.model.buildings, this.world.sampleHeight, out);
 
     // CSM fits the active view camera
     this.lighting.setShadowCamera(this.tacticalCam.camera);

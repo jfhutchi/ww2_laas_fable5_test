@@ -51,5 +51,12 @@ const clear = clipCameraToBuildings(
   () => 0,
 );
 assert.deepEqual(clear, { x: 10, y: 4, z: 8 }, 'clear camera paths retain their requested framing');
+const leavingSafetyMargin = clipCameraToBuildings(
+  { x: 0, y: 3, z: 6 },
+  { x: 0, y: 4, z: 10 },
+  [testBuilding],
+  () => 0,
+);
+assert.deepEqual(leavingSafetyMargin, { x: 0, y: 4, z: 10 }, 'camera may move out of a facade safety margin');
 
 console.log('control regressions: PASS');

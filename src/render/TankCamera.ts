@@ -32,8 +32,11 @@ export class TankCamera {
   private look = new Vector3();
   private shake = 0;
   private shakeTime = 0;
+  private anchor = new Vector3();
+  private desiredEye = new Vector3();
 
   sampleHeight: (x: number, z: number) => number = () => 0;
+  resolveEye: (anchor: Vector3, desired: Vector3, out: Vector3) => Vector3 = (_anchor, desired, out) => out.copy(desired);
 
   constructor(aspect: number) {
     this.camera = new PerspectiveCamera(52, aspect, 0.3, 6000);
@@ -73,11 +76,16 @@ export class TankCamera {
     const latZ = dirX;
 
     // Desired eye: behind the aim direction, offset up and to the shoulder.
-    const ex = target.position.x - dirX * p.back + latX * p.side;
-    const ez = target.position.z - dirZ * p.back + latZ * p.side;
+    let ex = target.position.x - dirX * p.back + latX * p.side;
+    let ez = target.position.z - dirZ * p.back + latZ * p.side;
     let ey = target.position.y + p.up + Math.sin(-this.aimPitch) * p.back * 0.5;
     const ground = this.sampleHeight(ex, ez);
     ey = Math.max(ey, ground + 1.2);
+    this.anchor.set(target.position.x, target.position.y + 2.2, target.position.z);
+    const resolvedEye = this.resolveEye(this.anchor, this.desiredEye.set(ex, ey, ez), this.desiredEye);
+    ex = resolvedEye.x;
+    ey = resolvedEye.y;
+    ez = resolvedEye.z;
 
     // Aim point: far along the aim direction from the turret.
     const range = 120;
@@ -110,6 +118,7 @@ export class TankCamera {
       this.pos.y += Math.sin(this.shakeTime * 1.71 + 1.3) * s * 0.7;
       this.shake = damp(this.shake, 0, 6, dt);
     }
+    this.resolveEye(this.anchor, this.pos, this.pos);
 
     this.camera.fov = p.fov;
     this.camera.updateProjectionMatrix();
