@@ -7,6 +7,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 
 export interface LaunchRecipe {
@@ -203,9 +204,11 @@ async function pingServer(): Promise<boolean> {
 export async function ensureDevServer(): Promise<{ stop: () => void }> {
   if (await pingServer()) return { stop: () => undefined };
   console.log('[launch] starting dev server…');
-  devServer = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev'], {
+  // Own the actual Vite process rather than an npm/shell wrapper. On Windows,
+  // killing the wrapper leaves Vite alive and keeps Rollup's native module
+  // locked, breaking later reproducible installs.
+  devServer = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--port', '5173', '--strictPort'], {
     stdio: 'ignore',
-    shell: process.platform === 'win32',
     detached: false,
   });
   const deadline = Date.now() + 60000;

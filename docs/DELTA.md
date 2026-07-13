@@ -19,6 +19,8 @@ The final ranked visual loop replaced stepped black roof cutouts with determinis
 
 Final release audit found that the legacy `worldHash` advertised “layout entities + terrain” while omitting props, building damage, roads, fields, smoke, and tactical anchors. It is now one pure complete-content digest; regressions mutate a single prop and damage state to prove sensitivity, and the real WebGPU deterministic-seed check still passes same-seed equality/cross-seed divergence. The branch-wide 48-file diff is whitespace-clean, contains no `as any`/suppression/TODO markers, all texture sources remain tracked and documented as CC0, and `main` remains clean at `9bb3aec`.
 
+The same audit found a Windows lifecycle leak in the original harness: stopping the spawned npm wrapper left its Vite child alive, holding Rollup's native module open and making a later `npm ci` fail with `EPERM`. The launcher now spawns the Vite entry under the owned Node PID. A new lifecycle regression proves reachable-after-start and unreachable-after-stop; a clean install reports zero vulnerabilities, the complete 19/19 battery passes through the new lifecycle, and an explicit post-battery process scan finds no worktree Node process.
+
 ---
 
 ## Post-release iteration 8 — French town fabric: density, rows, architecture (closed)

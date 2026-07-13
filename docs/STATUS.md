@@ -27,6 +27,7 @@ Complete playable WWII combined-arms browser game (WebGPU / three.js WebGPURende
 
 ```
 npm install      ✓
+npm test         ✓  controls, assets, command visuals, world content, server lifecycle
 npm run typecheck ✓  (strict, zero any)
 npm run build     ✓
 npm run dev       ✓  (used by every harness run)
@@ -37,6 +38,8 @@ npx tsx tools/final-shots.ts ✓ shots/final/{tactical_overhead,third_person_tan
 ```
 
 Battery proves: WebGPU init (no fallback) · deterministic seed (content-hash equality across loads, divergence across seeds) · right/middle gesture handoff and rendered-yaw panning · damaged-church roof geometry · full order of battle (3 Shermans, 3 rifle squads, 2 scouts vs PaK 40, 2 MG-42s, 5 grenadier squads, StuG III) · command + A* pathfinding over a 640 m march · two-sided live fire with cannon projectiles, hits and audio events · destruction with persistent vehicle wrecks · capture-state cycling with reinforcements at 50% · mission win via real capture · mission loss via real enemy fire · direct tank control (drive displacement, manual cannon shot, mode round-trip with tactical AI resuming) · live minimap terrain/unit binding · zero console errors, page exceptions or unhandled rejections after every scenario.
+
+The launcher owns the Vite process directly rather than an npm/shell wrapper. A regression proves start/stop reachability and the final Windows battery process audit confirms no worktree Node process remains; clean `npm ci` then succeeds with zero vulnerabilities.
 
 Performance (high preset, RTX-class, deterministic 1600×900 captures): ~15.6–15.9 M submitted triangles, typically above 110 fps after initialization; captures report zero page errors.
 

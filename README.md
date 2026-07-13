@@ -21,6 +21,7 @@ There is deliberately **no WebGL fallback** — unsupported browsers get a diagn
 ### Verification
 
 ```bash
+npm test             # pure regressions + owned dev-server lifecycle
 npm run typecheck    # tsc --noEmit (strict, zero any)
 npm run build        # typecheck + production bundle
 npm run shoot        # Playwright: tactical/tank/HUD screenshots → shots/
@@ -29,7 +30,7 @@ npm run battery      # 19-check gameplay + presentation verification battery
 npx tsx tools/final-shots.ts   # full final screenshot suite → shots/final/
 ```
 
-The battery launches the real game in headless WebGPU Chromium and proves, among other things: deterministic seeds, strict right/middle gesture ownership, camera-relative movement during orbit smoothing, attached damaged-building geometry, full order-of-battle spawns, pathfinding, two-sided live fire, penetrations and wrecks, capture-state cycling, reinforcements at 50%, an actually winnable and losable mission, live minimap state, and zero console errors/exceptions/rejections after every scenario.
+The battery launches the real game in headless WebGPU Chromium and proves, among other things: deterministic seeds, strict right/middle gesture ownership, camera-relative movement during orbit smoothing, attached damaged-building geometry, full order-of-battle spawns, pathfinding, two-sided live fire, penetrations and wrecks, capture-state cycling, reinforcements at 50%, an actually winnable and losable mission, live minimap state, and zero console errors/exceptions/rejections after every scenario. The launcher regression also proves its owned Vite process exits cleanly, including on Windows.
 
 ## The mission — *Capture the Crossroads*
 

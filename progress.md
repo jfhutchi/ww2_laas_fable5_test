@@ -25,6 +25,7 @@ Original prompt: Preserve the final Fable 5 version on main and build a much bet
 - Warm-started ambient building smoke into established battle columns and added a browser particle-floor assertion.
 - Unified canonical/final village tank staging and made screenshot capture fail closed on browser/in-game diagnostics with guaranteed cleanup.
 - Replaced the partial legacy world hash with a complete pure digest covering every layout entity, tactical anchor, and sampled terrain; added prop/damage sensitivity regressions.
+- Fixed the Windows test-server child-process leak by owning Vite directly; added start/stop proof and confirmed clean install plus zero post-battery processes.
 
 ## Current
 
