@@ -14,6 +14,7 @@ import {
   Group,
   Mesh,
   SphereGeometry,
+  TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Random.ts';
@@ -94,6 +95,37 @@ function cyl(rTop: number, rBot: number, h: number, seg: number, x: number, y: n
   return paint(g, base, rng);
 }
 
+function taperedBox(
+  length: number,
+  height: number,
+  width: number,
+  x: number,
+  y: number,
+  z: number,
+  base: Color,
+  rng: Rng,
+  topLength: number,
+  topWidth: number,
+  topShiftX = 0,
+): BufferGeometry {
+  const g = new BoxGeometry(length, height, width, 2, 1, 2);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) <= 0) continue;
+    pos.setX(i, pos.getX(i) * topLength + topShiftX);
+    pos.setZ(i, pos.getZ(i) * topWidth);
+  }
+  g.translate(x, y, z);
+  return paint(g, base, rng, 0.055, 0.006);
+}
+
+function ellipsoid(rx: number, ry: number, rz: number, x: number, y: number, z: number, base: Color, rng: Rng, segments = 18): BufferGeometry {
+  const g = new SphereGeometry(1, segments, Math.max(10, Math.round(segments * 0.65)));
+  g.scale(rx, ry, rz);
+  g.translate(x, y, z);
+  return paint(g, base, rng, 0.055);
+}
+
 function meshOf(parts: BufferGeometry[], mat: Mesh["material"]): Mesh {
   const merged = mergeGeometries(parts, false);
   if (!merged) throw new Error('vehicle merge failed');
@@ -119,6 +151,13 @@ function trackSide(parts: BufferGeometry[], len: number, height: number, width: 
   for (let i = 0; i < wheels; i++) {
     const x = -len / 2 + ((i + 0.5) / wheels) * len;
     parts.push(cyl(height * 0.34, height * 0.34, width * 1.06, 18, x, height * 0.36, zOff, RUBBER, rng, { rotX: Math.PI / 2 }));
+    parts.push(cyl(height * 0.14, height * 0.14, width * 1.12, 14, x, height * 0.36, zOff, TRACK, rng, { rotX: Math.PI / 2 }));
+  }
+  // Individual shoes break up the long rectangular track runs in close views.
+  for (let i = 0; i < 18; i++) {
+    const x = -len / 2 + ((i + 0.5) / 18) * len;
+    parts.push(bx(len / 19, 0.055, width * 1.08, x, height * 0.99, zOff, TRACK, rng, { jitter: 0.004 }));
+    parts.push(bx(len / 19, 0.055, width * 1.08, x, height * 0.02, zOff, TRACK, rng, { jitter: 0.004 }));
   }
 }
 
@@ -154,7 +193,7 @@ export function buildSherman(seed: number): VehicleRig {
   const trackParts: BufferGeometry[] = [];
 
   // proportions (m): length 5.8, width 2.6, hull height ~1.5, turret on top
-  const L = 5.0;
+  const L = 5.8;
   const W = 2.62;
   const trackW = 0.42;
 
@@ -162,25 +201,45 @@ export function buildSherman(seed: number): VehicleRig {
   trackSide(trackParts, L * 0.94, 0.9, trackW, -(W / 2 - trackW / 2), 6, rng);
 
   const bodyW = W - trackW * 2 - 0.06;
-  // lower hull
-  hullParts.push(bx(L, 0.55, bodyW, 0, 0.62, 0, OLIVE_DK, rng, { jitter: 0.01 }));
-  // upper hull with rounded cast impression: main box + bevel strips + sloped glacis
-  hullParts.push(bx(L * 0.82, 0.5, W - 0.1, -L * 0.05, 1.12, 0, OLIVE, rng, { jitter: 0.012 }));
+  // Tapered cast hull volumes replace the rectangular boxes that dominated
+  // the chase-camera silhouette.
+  hullParts.push(taperedBox(L, 0.62, bodyW, 0, 0.64, 0, OLIVE_DK, rng, 0.94, 0.9));
+  hullParts.push(taperedBox(L * 0.84, 0.64, W - 0.08, -L * 0.04, 1.14, 0, OLIVE, rng, 0.82, 0.8, -0.12));
   // sloped glacis (front plate)
   hullParts.push(bx(1.15, 0.52, W - 0.12, L * 0.38, 1.0, 0, OLIVE, rng, { rotZ: -0.62, jitter: 0.01 }));
   // rounded cast shoulders: bevel strips along the upper hull edges
   hullParts.push(bx(L * 0.8, 0.2, 0.34, -L * 0.05, 1.38, bodyW / 2 + 0.06, OLIVE, rng, { rotX: 0.6 }));
   hullParts.push(bx(L * 0.8, 0.2, 0.34, -L * 0.05, 1.38, -(bodyW / 2 + 0.06), OLIVE, rng, { rotX: -0.6 }));
+  // track guards and their thin outer lips
+  for (const side of [-1, 1]) {
+    hullParts.push(bx(L * 0.94, 0.06, 0.27, -0.02, 1.18, side * (W / 2 - 0.08), OLIVE_DK, rng, { jitter: 0.006 }));
+    hullParts.push(bx(L * 0.9, 0.12, 0.035, -0.05, 1.12, side * (W / 2 + 0.045), OLIVE, rng, { jitter: 0.005 }));
+  }
   // engine deck + grills
   hullParts.push(bx(L * 0.3, 0.1, bodyW * 0.9, -L * 0.34, 1.42, 0, OLIVE_DK, rng, {}));
   for (let i = 0; i < 3; i++) {
     hullParts.push(bx(L * 0.26, 0.03, 0.16, -L * 0.34, 1.48, -0.3 + i * 0.3, OLIVE_DK, rng, {}));
   }
+  // driver's and bow-gunner's cast hoods
+  hullParts.push(ellipsoid(0.38, 0.18, 0.3, 0.78, 1.48, 0.48, OLIVE, rng, 16));
+  hullParts.push(ellipsoid(0.38, 0.18, 0.3, 0.78, 1.48, -0.48, OLIVE, rng, 16));
+  hullParts.push(bx(0.42, 0.035, 0.28, 0.8, 1.64, 0.48, OLIVE_DK, rng, { rotZ: -0.06 }));
+  hullParts.push(bx(0.42, 0.035, 0.28, 0.8, 1.64, -0.48, OLIVE_DK, rng, { rotZ: -0.06 }));
   // bow MG ball
   hullParts.push(paint(new SphereGeometry(0.14, 8, 6).translate(L * 0.34, 1.28, -0.5), OLIVE_DK, rng));
   hullParts.push(cyl(0.045, 0.045, 0.5, 6, L * 0.52, 1.28, -0.5, TRACK, rng, { rotZ: Math.PI / 2 }));
-  // ---- field stowage & tools (kept ON the deck silhouette — anything that
-  // pokes past the hull line reads as floating junk from the chase camera)
+  // Rear plate, exhausts, tow eyes, and deck fittings give the chase camera
+  // recognizable M4A1 structure instead of a blank slab.
+  hullParts.push(bx(0.12, 0.74, bodyW * 0.92, -L * 0.49, 0.82, 0, OLIVE_DK, rng, { rotZ: 0.12, jitter: 0.008 }));
+  for (const side of [-1, 1]) {
+    hullParts.push(cyl(0.075, 0.09, 0.62, 10, -L * 0.51, 0.72, side * 0.56, TRACK, rng, { rotZ: Math.PI / 2 }));
+    const eye = new TorusGeometry(0.12, 0.035, 6, 12);
+    eye.rotateY(Math.PI / 2);
+    eye.translate(-L * 0.515, 0.42, side * 0.78);
+    hullParts.push(paint(eye, STEEL, rng, 0.035));
+  }
+  hullParts.push(bx(0.035, 0.46, 0.82, -L * 0.56, 0.92, 0, STEEL, rng, {}));
+  // ---- field stowage & tools
   // rear engine-deck jerrycans + crate + duffel
   for (let i = 0; i < 4; i++) {
     hullParts.push(bx(0.22, 0.28, 0.16, -L * 0.38, 1.6, -0.55 + i * 0.33, JERRY, rng, { jitter: 0.008 }));
@@ -200,11 +259,16 @@ export function buildSherman(seed: number): VehicleRig {
   starPlate(hullParts, 0.34, 0, 1.13, (W - 0.1) / 2 + 0.011, 0, rng);
   starPlate(hullParts, 0.34, 0, 1.13, -((W - 0.1) / 2 + 0.011), Math.PI, rng);
 
-  group.add(meshOf(trackParts, MAT_TRACK));
-  group.add(meshOf(hullParts, MAT_BODY));
+  const runningGear = meshOf(trackParts, MAT_TRACK);
+  runningGear.name = 'sherman-running-gear';
+  group.add(runningGear);
+  const hull = meshOf(hullParts, MAT_BODY);
+  hull.name = 'sherman-hull';
+  group.add(hull);
 
   // ---- turret (rounded cast: squashed sphere + ring), pivot at hull top
   const turret = new Group();
+  turret.name = 'sherman-turret';
   turret.position.set(0.25, 1.52, 0);
   const turretParts: BufferGeometry[] = [];
   const dome = new SphereGeometry(0.88, 36, 22);
@@ -225,6 +289,13 @@ export function buildSherman(seed: number): VehicleRig {
   // commander cupola + hatch
   turretParts.push(cyl(0.26, 0.28, 0.16, 20, -0.3, 0.78, 0.3, OLIVE_DK, rng, {}));
   turretParts.push(cyl(0.24, 0.24, 0.05, 20, -0.3, 0.88, 0.3, OLIVE, rng, {}));
+  // cupola vision blocks and loader's hatch
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    turretParts.push(bx(0.12, 0.075, 0.055, -0.3 + Math.cos(angle) * 0.24, 0.82, 0.3 + Math.sin(angle) * 0.24, STEEL, rng, { rotY: -angle }));
+  }
+  turretParts.push(cyl(0.22, 0.24, 0.045, 20, 0.18, 0.84, -0.35, OLIVE_DK, rng, {}));
+  turretParts.push(bx(0.14, 0.12, 0.1, 0.42, 0.78, 0.3, STEEL, rng, {}));
   // mantlet
   turretParts.push(bx(0.34, 0.5, 0.62, 0.82, 0.3, 0, OLIVE_DK, rng, { jitter: 0.015 }));
   // turret bustle: welded rear stowage rack + piled kit
@@ -232,8 +303,10 @@ export function buildSherman(seed: number): VehicleRig {
   for (const zz of [-0.48, 0.48]) {
     turretParts.push(bx(0.55, 0.16, 0.03, -1.02, 0.22, zz, STEEL, rng, {})); // rack side rails
   }
-  turretParts.push(bx(0.48, 0.3, 0.9, -1.0, 0.32, 0, CANVAS, rng, { jitter: 0.035, mottle: 0.16 })); // piled stowage
-  turretParts.push(bx(0.34, 0.24, 0.3, -0.9, 0.56, -0.3, CRATE, rng, { jitter: 0.02 })); // crate on top
+  turretParts.push(cyl(0.17, 0.19, 0.76, 14, -1.0, 0.32, 0.08, CANVAS, rng, { rotX: Math.PI / 2 }));
+  turretParts.push(ellipsoid(0.28, 0.18, 0.25, -0.92, 0.46, -0.32, CANVAS, rng, 14));
+  turretParts.push(ellipsoid(0.24, 0.16, 0.22, -1.02, 0.44, 0.34, CANVAS, rng, 14));
+  turretParts.push(bx(0.28, 0.18, 0.26, -0.82, 0.48, -0.02, CRATE, rng, { jitter: 0.012 }));
   // radio antenna
   turretParts.push(cyl(0.01, 0.02, 1.5, 5, -0.55, 1.55, 0.52, STEEL, rng, {}));
   // lifting hooks
@@ -258,20 +331,25 @@ export function buildSherman(seed: number): VehicleRig {
       turretParts.push(s);
     }
   }
-  turret.add(meshOf(turretParts, MAT_TURRET));
+  const turretMesh = meshOf(turretParts, MAT_TURRET);
+  turretMesh.name = 'sherman-turret-casting';
+  turret.add(turretMesh);
 
   // ---- gun: pivot at mantlet
   const gun = new Group();
+  gun.name = 'sherman-main-gun';
   gun.position.set(0.82, 0.3, 0);
   const gunParts: BufferGeometry[] = [];
-  gunParts.push(cyl(0.075, 0.095, 2.3, 20, 1.15, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
+  gunParts.push(cyl(0.075, 0.095, 2.75, 20, 1.375, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
   // muzzle / gun collar for a beefier barrel read
-  gunParts.push(cyl(0.11, 0.11, 0.22, 16, 2.28, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
-  gun.add(meshOf(gunParts, MAT_GUN));
+  gunParts.push(cyl(0.11, 0.11, 0.22, 16, 2.72, 0, 0, OLIVE_DK, rng, { rotZ: Math.PI / 2 }));
+  const gunMesh = meshOf(gunParts, MAT_GUN);
+  gunMesh.name = 'sherman-gun-mesh';
+  gun.add(gunMesh);
   turret.add(gun);
   group.add(turret);
 
-  return { group, turret, gun, muzzleLength: 2.3 };
+  return { group, turret, gun, muzzleLength: 2.8 };
 }
 
 // ------------------------------------------------------------------- StuG

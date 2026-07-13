@@ -14,8 +14,8 @@ export interface TankCameraTarget {
   yaw: number;
 }
 
-const PRESETS = [
-  { back: 7.6, up: 2.7, side: 0.9, fov: 50 }, // reference framing: low, close
+export const TANK_CAMERA_PRESETS = [
+  { back: 9.3, up: 3.6, side: 0.9, fov: 48 }, // complete vehicle plus useful battlefield context
   { back: 12, up: 4.4, side: 1.6, fov: 48 },
   { back: 5.6, up: 2.2, side: 0.9, fov: 56 },
 ] as const;
@@ -40,7 +40,7 @@ export class TankCamera {
   }
 
   cyclePreset(): void {
-    this.presetIndex = (this.presetIndex + 1) % PRESETS.length;
+    this.presetIndex = (this.presetIndex + 1) % TANK_CAMERA_PRESETS.length;
   }
 
   addAim(dx: number, dy: number): void {
@@ -65,7 +65,7 @@ export class TankCamera {
   }
 
   private solve(target: TankCameraTarget, dt: number, snap: boolean): void {
-    const p = PRESETS[this.presetIndex] ?? PRESETS[0];
+    const p = TANK_CAMERA_PRESETS[this.presetIndex] ?? TANK_CAMERA_PRESETS[0];
     // aim direction in world convention: (cos yaw, sin yaw)
     const dirX = Math.cos(this.aimYaw);
     const dirZ = Math.sin(this.aimYaw);

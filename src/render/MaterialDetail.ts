@@ -142,7 +142,7 @@ const SETS = {
   bark: { asset: 'Bark012', tile: 1.6, norm: [3.8, 4.94, 11.1], satKeep: 0.8, strength: 1, roughMean: 0.674, roughInfluence: 0.4, dispAmp: 0.02 },
   // vehicle/figure kinds — sampled in LOCAL space so paint never swims as
   // the mesh drives around; relief output goes through transformNormalToView
-  armor: { asset: 'Metal005', tile: 1.9, norm: [5.01, 5.28, 5.29], satKeep: 0.5, strength: 0.78, roughMean: 0.377, roughInfluence: 0.35, dispAmp: 0.008 },
+  armor: { asset: 'Metal005', tile: 0.65, norm: [5.01, 5.28, 5.29], satKeep: 0.35, strength: 0.38, roughMean: 0.377, roughInfluence: 0.16, dispAmp: 0.0025 },
   tracks: { asset: 'Metal038', tile: 1.1, norm: [8.57, 8.27, 8.21], satKeep: 0.5, strength: 0.9, roughMean: 0.366, roughInfluence: 0.3, dispAmp: 0 },
   cloth: { asset: 'Fabric066', tile: 0.55, norm: [3.9, 4.14, 5.18], satKeep: 0.6, strength: 0.9, roughMean: 0.818, roughInfluence: 0.4, dispAmp: 0 },
 } satisfies Record<string, PbrSet>;
