@@ -87,6 +87,13 @@ function box(
   g.dispose();
 }
 
+function transformNew(list: BufferGeometry[], start: number, transform: (geometry: BufferGeometry) => void): void {
+  for (let i = start; i < list.length; i++) {
+    const geometry = list[i];
+    if (geometry) transform(geometry);
+  }
+}
+
 /** Gable-end triangle fill (two triangles, both faces). */
 function gableTri(acc: BufferGeometry[], width: number, rise: number, x: number, y: number, z: number, color: Color, rng: Rng): void {
   const hw = width / 2;
@@ -351,30 +358,48 @@ function buildHouse(spec: BuildingSpec): Group {
     const front: WallOpening[] = [{ u: 0, width: 2.6, sill: 0, head: 3.0, door: true }];
     const side: WallOpening[] = [{ u: -W * 0.22, width: 0.7, sill: 1.4, head: 2.1, door: false }];
     const g1: BufferGeometry[] = [];
+    let woodStart = wood.length;
     wallWithOpenings(g1, wood, D, H, t, front, wallC, shutterC, rng, charAmount);
-    for (const g of g1) g.rotateY(Math.PI / 2), g.translate(-W / 2 + t / 2, 0, 0);
+    const placeG1 = (g: BufferGeometry): void => { g.rotateY(Math.PI / 2); g.translate(-W / 2 + t / 2, 0, 0); };
+    for (const g of g1) placeG1(g);
+    transformNew(wood, woodStart, placeG1);
     masonry.push(...g1);
     const g2: BufferGeometry[] = [];
+    woodStart = wood.length;
     wallWithOpenings(g2, wood, D, H, t, [], wallC, shutterC, rng, charAmount);
-    for (const g of g2) g.rotateY(Math.PI / 2), g.translate(W / 2 - t / 2, 0, 0);
+    const placeG2 = (g: BufferGeometry): void => { g.rotateY(Math.PI / 2); g.translate(W / 2 - t / 2, 0, 0); };
+    for (const g of g2) placeG2(g);
+    transformNew(wood, woodStart, placeG2);
     masonry.push(...g2);
     const g3: BufferGeometry[] = [];
+    woodStart = wood.length;
     wallWithOpenings(g3, wood, W, H, t, side, wallC, shutterC, rng, charAmount);
-    for (const g of g3) g.translate(0, 0, -D / 2 + t / 2);
+    const placeG3 = (g: BufferGeometry): void => { g.translate(0, 0, -D / 2 + t / 2); };
+    for (const g of g3) placeG3(g);
+    transformNew(wood, woodStart, placeG3);
     masonry.push(...g3);
     const g4: BufferGeometry[] = [];
+    woodStart = wood.length;
     wallWithOpenings(g4, wood, W, H, t, [], wallC, shutterC, rng, charAmount);
-    for (const g of g4) g.translate(0, 0, D / 2 - t / 2);
+    const placeG4 = (g: BufferGeometry): void => { g.translate(0, 0, D / 2 - t / 2); };
+    for (const g of g4) placeG4(g);
+    transformNew(wood, woodStart, placeG4);
     masonry.push(...g4);
   } else {
     // front (+Z local), back, two gable ends
     const front: BufferGeometry[] = [];
+    let woodStart = wood.length;
     wallWithOpenings(front, wood, W, H, t, facadeOpenings(W, floors, !isShed && !shop, shop), wallC, shutterC, rng, charAmount);
-    for (const g of front) g.translate(0, 0, D / 2 - t / 2);
+    const placeFront = (g: BufferGeometry): void => { g.translate(0, 0, D / 2 - t / 2); };
+    for (const g of front) placeFront(g);
+    transformNew(wood, woodStart, placeFront);
     masonry.push(...front);
     const back: BufferGeometry[] = [];
+    woodStart = wood.length;
     wallWithOpenings(back, wood, W, H, t, isShed ? [] : facadeOpenings(W, floors, false), wallC, shutterC, rng, charAmount);
-    for (const g of back) g.rotateY(Math.PI), g.translate(0, 0, -D / 2 + t / 2);
+    const placeBack = (g: BufferGeometry): void => { g.rotateY(Math.PI); g.translate(0, 0, -D / 2 + t / 2); };
+    for (const g of back) placeBack(g);
+    transformNew(wood, woodStart, placeBack);
     masonry.push(...back);
     for (const side of [-1, 1]) {
       const end: BufferGeometry[] = [];
@@ -398,8 +423,11 @@ function buildHouse(spec: BuildingSpec): Group {
           }
         }
       }
+      woodStart = wood.length;
       wallWithOpenings(end, wood, D, H, t, endOpen, wallC, shutterC, rng, charAmount);
-      for (const g of end) g.rotateY((Math.PI / 2) * side), g.translate((W / 2 - t / 2) * side, 0, 0);
+      const placeEnd = (g: BufferGeometry): void => { g.rotateY((Math.PI / 2) * side); g.translate((W / 2 - t / 2) * side, 0, 0); };
+      for (const g of end) placeEnd(g);
+      transformNew(wood, woodStart, placeEnd);
       masonry.push(...end);
     }
     // string courses: a thin proud band at every floor line on street/back
@@ -652,8 +680,11 @@ function buildChurch(spec: BuildingSpec): Group {
       openings.push({ u: -D / 2 + ((i + 0.5) / n) * D, width: 0.85, sill: 1.7, head: H - 1.1, door: false });
     }
     const list: BufferGeometry[] = [];
+    const woodStart = wood.length;
     wallWithOpenings(list, wood, D, H, t, openings, stone, new Color(0.3, 0.3, 0.32), rng, charAmount);
-    for (const g of list) g.rotateY(Math.PI / 2), g.translate((W / 2 - t / 2) * side, 0, 0);
+    const placeSide = (g: BufferGeometry): void => { g.rotateY(Math.PI / 2); g.translate((W / 2 - t / 2) * side, 0, 0); };
+    for (const g of list) placeSide(g);
+    transformNew(wood, woodStart, placeSide);
     masonry.push(...list);
     // buttresses
     for (let i = 0; i <= n; i++) {
@@ -665,8 +696,11 @@ function buildChurch(spec: BuildingSpec): Group {
   // chancel end wall (rear)
   {
     const list: BufferGeometry[] = [];
+    const woodStart = wood.length;
     wallWithOpenings(list, wood, W, H, t, [{ u: 0, width: 1.1, sill: 2.2, head: H - 0.9, door: false }], stone, new Color(0.3, 0.3, 0.32), rng, charAmount);
-    for (const g of list) g.rotateY(Math.PI), g.translate(0, 0, -D / 2 + t / 2);
+    const placeRear = (g: BufferGeometry): void => { g.rotateY(Math.PI); g.translate(0, 0, -D / 2 + t / 2); };
+    for (const g of list) placeRear(g);
+    transformNew(wood, woodStart, placeRear);
     masonry.push(...list);
   }
   box(masonry, W - t * 2, H, D - t * 2, 0, H / 2, 0, new Color(0.05, 0.045, 0.04), rng, { mottle: 0.08 });
@@ -691,8 +725,11 @@ function buildChurch(spec: BuildingSpec): Group {
   // tower walls (four sides, door on front, louvered belfry openings up top)
   const towerWall = (len: number, rotY: number, ox: number, oz: number, openings: WallOpening[]): void => {
     const list: BufferGeometry[] = [];
+    const woodStart = wood.length;
     wallWithOpenings(list, wood, len, towerH, 0.45, openings, stone, new Color(0.24, 0.22, 0.2), rng, charAmount);
-    for (const g of list) g.rotateY(rotY), g.translate(ox, 0, oz);
+    const placeTowerWall = (g: BufferGeometry): void => { g.rotateY(rotY); g.translate(ox, 0, oz); };
+    for (const g of list) placeTowerWall(g);
+    transformNew(wood, woodStart, placeTowerWall);
     masonry.push(...list);
   };
   towerWall(TW, 0, 0, tz + TW / 2 - 0.22, [
