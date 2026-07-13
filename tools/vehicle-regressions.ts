@@ -63,5 +63,9 @@ const woodwork = house.children[2];
 assert.ok(woodwork, 'house exposes a dedicated facade-woodwork mesh');
 const woodworkCenter = new Box3().setFromObject(woodwork).getCenter(new Vector3());
 assert.ok(woodworkCenter.z > 2.2, `window and door woodwork is detached from its facade (z=${woodworkCenter.z.toFixed(2)}m)`);
+const woodworkMesh = woodwork as Mesh;
+const woodworkPositions = woodworkMesh.geometry.getAttribute('position');
+const woodworkTriangles = woodworkMesh.geometry.index ? woodworkMesh.geometry.index.count / 3 : woodworkPositions.count / 3;
+assert.ok(woodworkTriangles > 320, `facade woodwork lacks panel and slat relief (${woodworkTriangles} triangles)`);
 
 console.log(`vehicle regressions: PASS (${Math.round(triangles)} tank / ${Math.round(soldierTriangles)} soldier triangles)`);
