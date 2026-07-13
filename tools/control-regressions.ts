@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { pointerButtonMask } from '../src/core/PointerButtons.ts';
+import { TANK_CAMERA_PRESETS } from '../src/render/TankCamera.ts';
 import { cameraRelativePan } from '../src/render/TacticalPan.ts';
 
 const EPS = 1e-9;
@@ -20,5 +21,11 @@ assert.ok(Math.abs(eastFacing.z) < EPS, 'quarter-turn forward does not leak into
 const rightStrafe = cameraRelativePan(Math.PI / 2, 1, 0);
 assert.ok(Math.abs(rightStrafe.x) < EPS, 'right strafe at a quarter turn does not leak into X');
 assert.ok(Math.abs(rightStrafe.z + 1) < EPS, 'right strafe remains relative to the camera');
+
+const chase = TANK_CAMERA_PRESETS[0];
+assert.ok(chase, 'tank camera exposes a default chase preset');
+assert.ok(chase.back >= 9, 'default chase camera keeps the complete vehicle in frame');
+assert.ok(chase.up >= 3.4, 'default chase camera preserves battlefield context above the vehicle');
+assert.ok(chase.fov >= 45 && chase.fov <= 52, 'default chase lens avoids arcade-like distortion');
 
 console.log('control regressions: PASS');
