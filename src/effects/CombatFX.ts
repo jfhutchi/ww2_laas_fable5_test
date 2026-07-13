@@ -88,18 +88,29 @@ function radialTexture(soft: boolean): CanvasTexture {
   c.height = 128;
   const ctx = c.getContext('2d');
   if (ctx) {
-    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
     if (soft) {
-      g.addColorStop(0, 'rgba(255,255,255,0.85)');
-      g.addColorStop(0.45, 'rgba(255,255,255,0.4)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
+      // Overlapping offset lobes avoid the unmistakable circular-particle
+      // silhouette while retaining a single tiny deterministic texture.
+      for (let i = 0; i < 9; i++) {
+        const angle = i * 2.39996;
+        const radius = 24 + ((i * 17) % 19);
+        const cx = 64 + Math.cos(angle) * (8 + (i % 3) * 5);
+        const cy = 64 + Math.sin(angle) * (6 + (i % 4) * 4);
+        const g = ctx.createRadialGradient(cx, cy, 1, cx, cy, radius);
+        g.addColorStop(0, 'rgba(255,255,255,0.2)');
+        g.addColorStop(0.48, 'rgba(255,255,255,0.11)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 128, 128);
+      }
     } else {
+      const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
       g.addColorStop(0, 'rgba(255,255,255,1)');
       g.addColorStop(0.25, 'rgba(255,255,255,0.9)');
       g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 128, 128);
     }
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
   }
   return new CanvasTexture(c);
 }
@@ -141,7 +152,7 @@ export class CombatFX {
     const smokeMat = new MeshBasicMaterial({
       map: softTex,
       transparent: true,
-      opacity: 0.46,
+      opacity: 0.36,
       depthWrite: false,
       fog: true,
     });
@@ -364,7 +375,7 @@ export class CombatFX {
   }
 
   private spawnImpactDust(x: number, y: number, z: number, strength: number): void {
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       this.smoke.push({
         x: x + this.rng.range(-0.5, 0.5),
         y,
@@ -373,10 +384,10 @@ export class CombatFX {
         vy: this.rng.range(0.4, 1),
         vz: this.rng.range(-0.5, 0.5),
         life: 0,
-        ttl: this.rng.range(0.5, 1),
-        size: 0.6 * strength + 0.3,
-        grow: 1.2,
-        r: 0.62, g: 0.56, b: 0.45,
+        ttl: this.rng.range(0.7, 1.25),
+        size: 0.5 * strength + this.rng.range(0.2, 0.42),
+        grow: this.rng.range(0.8, 1.35),
+        r: 0.42, g: 0.37, b: 0.29,
         fade: 1,
       });
     }
