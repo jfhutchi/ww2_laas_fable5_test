@@ -8,6 +8,8 @@
     "dev": "vite --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 5174 --strictPort",
+    "test": "npm run test:controls",
+    "test:controls": "tsx tools/control-regressions.ts",
     "typecheck": "tsc --noEmit",
     "shoot": "tsx tools/shoot.ts",
     "compare": "tsx tools/compare.ts",

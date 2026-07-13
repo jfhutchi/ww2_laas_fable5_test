@@ -104,6 +104,29 @@ const checks: Check[] = [
     },
   },
   {
+    id: 'tactical-input-ownership',
+    name: 'Right-button command gestures never rotate the tactical camera',
+    fn: async ({ page }) => {
+      await bootTo(page, { mode: 'tactical', freeze: true });
+      await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(4)));
+      const before = await page.evaluate(() => window.__oc.api?.getCameraPose() ?? null);
+      assert(before !== null, 'camera pose API missing');
+
+      await page.mouse.move(960, 540);
+      await page.mouse.down({ button: 'right' });
+      await page.mouse.move(1100, 600, { steps: 12 });
+      await page.mouse.up({ button: 'right' });
+      await page.evaluate(async () => window.__oc.settle && (await window.__oc.settle(4)));
+
+      const after = await page.evaluate(() => window.__oc.api?.getCameraPose() ?? null);
+      assert(after !== null, 'camera pose API disappeared');
+      assert(
+        Math.abs(after.yaw - before.yaw) < 0.001 && Math.abs(after.pitch - before.pitch) < 0.001,
+        `right drag rotated camera (yaw ${before.yaw} -> ${after.yaw}, pitch ${before.pitch} -> ${after.pitch})`,
+      );
+    },
+  },
+  {
     id: 'shot-tactical',
     name: 'Tactical view screenshot captured',
     fn: async ({ page }) => {
