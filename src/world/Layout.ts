@@ -871,15 +871,23 @@ export function generateLayout(seed: number): WorldModel {
   const playerP = pointAtRadius(southArm, 640) ?? { x: 0, z: 640 };
   const playerFacing = Math.atan2(-playerP.z, -playerP.x);
 
-  // AT gun: sited on the road shoulder, firing straight down the southern
-  // approach — the classic PaK position covering the axis of advance.
-  const atP = pointAtRadius(southArm, 96) ?? { x: 0, z: 96 };
-  const atDir = dirAtRadius(southArm, 96); // points outward (south, toward the player)
-  const atSide = damageRng.chance(0.5) ? 1 : -1;
-  const atPos = {
-    x: atP.x + Math.cos(atDir + (Math.PI / 2) * atSide) * 4.2,
-    z: atP.z + Math.sin(atDir + (Math.PI / 2) * atSide) * 4.2,
-  };
+  // AT gun: emplaced IN TOWN, covering the southern axis of advance — a gun
+  // in the square firing down the approach street is the defended-bourg
+  // classic (Carentan, Saint-Côme). The exact site varies per seed among
+  // spots that all enfilade the player's street; each is nudged off any
+  // building footprint so the crew and sandbag arc always fit.
+  const atCandidates = [
+    { x: 3.5, z: -19 }, // north rond-point edge, straight down the street
+    { x: -14, z: -9 }, // NW plaza corner, angled across the square
+    { x: 15, z: -12 }, // NE street mouth, diagonal enfilade
+  ];
+  const pick = atCandidates[damageRng.int(0, atCandidates.length - 1)] ?? { x: 3.5, z: -19 };
+  const atPos = { x: pick.x, z: pick.z };
+  for (let step = 0; step < 6 && insideAnyBuilding(atPos.x, atPos.z, 2.2); step++) {
+    // walk toward the crossroads until the emplacement footprint is clear
+    atPos.x *= 0.8;
+    atPos.z *= 0.8;
+  }
 
   // Defensive positions sit at the player-facing EDGE of buildings (outside
   // the footprint, behind its corner cover) — never inside the walls. With
