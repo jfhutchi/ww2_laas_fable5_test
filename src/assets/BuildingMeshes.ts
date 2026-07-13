@@ -177,20 +177,36 @@ function wallWithOpenings(
     box(wood, fw, oh, t * 1.15, right + fw / 2, oy, 0, frameC, rng, {});
     if (o.door) {
       const doorC = new Color().copy(shutterColor).multiplyScalar(rng.range(0.55, 0.8));
-      box(wood, o.width, oh, 0.06, o.u, oy, 0, doorC, rng, { mottle: 0.12 });
+      const doorZ = t * 0.48;
+      box(wood, o.width, oh, 0.06, o.u, oy, doorZ, doorC, rng, { mottle: 0.12 });
+      const panelC = new Color().copy(doorC).multiplyScalar(0.72);
+      for (const sx of [-1, 1]) {
+        box(wood, 0.055, oh * 0.82, 0.035, o.u + sx * o.width * 0.31, oy, doorZ + 0.045, panelC, rng, { mottle: 0.08 });
+      }
+      for (const sy of [-0.28, 0.04, 0.34]) {
+        box(wood, o.width * 0.72, 0.055, 0.035, o.u, oy + sy * oh, doorZ + 0.045, panelC, rng, { mottle: 0.08 });
+      }
     } else {
       box(wood, o.width, fw, t * 1.15, o.u, o.sill - fw / 2, 0, frameC, rng, {}); // sill
       // glass inset: dark but with a cool sky-reflected tint (not pure black)
-      box(wood, o.width * 0.92, oh * 0.92, 0.03, o.u, oy, -t * 0.18, new Color(0.1, 0.13, 0.17), rng, { mottle: 0.3 });
+      box(wood, o.width * 0.92, oh * 0.92, 0.03, o.u, oy, t * 0.08, new Color(0.045, 0.075, 0.1), rng, { mottle: 0.2 });
       // cross mullion
-      box(wood, 0.04, oh * 0.9, 0.05, o.u, oy, -t * 0.1, frameC, rng, {});
-      box(wood, o.width * 0.9, 0.04, 0.05, o.u, oy, -t * 0.1, frameC, rng, {});
+      box(wood, 0.04, oh * 0.9, 0.05, o.u, oy, t * 0.16, frameC, rng, {});
+      box(wood, o.width * 0.9, 0.04, 0.05, o.u, oy, t * 0.16, frameC, rng, {});
       // shutters (some open, some closed-looking = flush against wall sides)
       if (rng.chance(0.8)) {
         const sc = new Color().copy(shutterColor).multiplyScalar(rng.range(0.8, 1.15));
         const sw = o.width * 0.5;
-        box(wood, sw, oh, 0.045, left - sw / 2 - fw, oy, t * 0.32, sc, rng, { mottle: 0.15 });
-        if (rng.chance(0.85)) box(wood, sw, oh, 0.045, right + sw / 2 + fw, oy, t * 0.32, sc, rng, { mottle: 0.15 });
+        const shutterZ = t * 0.72;
+        const slatC = new Color().copy(sc).multiplyScalar(0.68);
+        const addShutter = (x: number): void => {
+          box(wood, sw, oh, 0.045, x, oy, shutterZ, sc, rng, { mottle: 0.15 });
+          for (const sy of [-0.3, -0.1, 0.1, 0.3]) {
+            box(wood, sw * 0.82, 0.035, 0.035, x, oy + sy * oh, shutterZ + 0.04, slatC, rng, { mottle: 0.08 });
+          }
+        };
+        addShutter(left - sw / 2 - fw);
+        if (rng.chance(0.85)) addShutter(right + sw / 2 + fw);
       }
     }
     cursor = right;
