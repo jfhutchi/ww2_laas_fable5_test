@@ -152,6 +152,50 @@ const checks: Check[] = [
     },
   },
   {
+    id: 'hud-layout',
+    name: 'Tactical and tank HUDs use one non-overlapping instrument system',
+    fn: async ({ page }) => {
+      await bootTo(page, { mode: 'tactical', preset: 'low', freeze: true });
+      const tactical = await page.evaluate(() => {
+        const objective = document.querySelector<HTMLElement>('#objective-panel')?.getBoundingClientRect() ?? null;
+        const roster = document.querySelector<HTMLElement>('#unit-roster')?.getBoundingClientRect() ?? null;
+        const command = document.querySelector<HTMLElement>('#command-panel')?.getBoundingClientRect() ?? null;
+        return {
+          identity: document.getElementById('tactical-hud')?.dataset['interface'] ?? '',
+          panelsOverlap: objective !== null && roster !== null && objective.left < roster.right && objective.right > roster.left && objective.top < roster.bottom && objective.bottom > roster.top,
+          commandInside: command !== null && command.left >= 0 && command.right <= innerWidth && command.bottom <= innerHeight,
+        };
+      });
+      assert(tactical.identity === 'command-net', `tactical instrument identity missing (${tactical.identity})`);
+      assert(!tactical.panelsOverlap, 'objective and roster panels overlap');
+      assert(tactical.commandInside, 'tactical command panel leaves the viewport');
+
+      await page.keyboard.press('Tab');
+      const focus = await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const style = active ? getComputedStyle(active) : null;
+        return { tag: active?.tagName ?? '', outline: style?.outlineStyle ?? 'none', width: style?.outlineWidth ?? '0px' };
+      });
+      assert(focus.tag === 'BUTTON', `keyboard focus did not reach a button (${focus.tag})`);
+      assert(focus.outline !== 'none' && focus.width !== '0px', 'focused HUD control has no visible outline');
+
+      await bootTo(page, { mode: 'tank', preset: 'low', freeze: true });
+      const tank = await page.evaluate(() => {
+        const telemetry = document.querySelector<HTMLElement>('#tank-readouts')?.getBoundingClientRect() ?? null;
+        const minimap = document.querySelector<HTMLElement>('#tank-minimap')?.getBoundingClientRect() ?? null;
+        const returnButton = document.querySelector<HTMLElement>('#tank-return')?.getBoundingClientRect() ?? null;
+        return {
+          identity: document.getElementById('tank-hud')?.dataset['interface'] ?? '',
+          telemetryMapOverlap: telemetry !== null && minimap !== null && telemetry.left < minimap.right && telemetry.right > minimap.left && telemetry.top < minimap.bottom && telemetry.bottom > minimap.top,
+          returnMapOverlap: returnButton !== null && minimap !== null && returnButton.left < minimap.right && returnButton.right > minimap.left && returnButton.top < minimap.bottom && returnButton.bottom > minimap.top,
+        };
+      });
+      assert(tank.identity === 'armor-station', `tank instrument identity missing (${tank.identity})`);
+      assert(!tank.telemetryMapOverlap, 'tank telemetry overlaps the minimap');
+      assert(!tank.returnMapOverlap, 'return-to-command control overlaps the minimap');
+    },
+  },
+  {
     id: 'shot-tactical',
     name: 'Tactical view screenshot captured',
     fn: async ({ page }) => {
