@@ -8,6 +8,7 @@ import type { PerspectiveCamera } from 'three';
 import { Vector3 } from 'three';
 import type { GameState } from '../game/GameState.ts';
 import { ARCHETYPES, type UnitState } from '../game/Types.ts';
+import { boundedMeterFraction } from './MeterMath.ts';
 
 const GLYPHS: Record<string, string> = {
   sherman: '▮',
@@ -97,7 +98,7 @@ export class UnitMarkers {
       const sy = (-this.v.y * 0.5 + 0.5) * viewportH;
       m.root.style.display = 'block';
       m.root.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%)`;
-      const frac = Math.max(0, u.hp) / arch.maxHp;
+      const frac = boundedMeterFraction(u.hp, arch.maxHp);
       m.bar.style.width = `${(frac * 100).toFixed(0)}%`;
       m.bar.className = 'marker-fill' + (frac < 0.3 ? ' critical' : frac < 0.6 ? ' low' : '');
       m.root.classList.toggle('selected', selection.has(u.id));

@@ -32,6 +32,15 @@ async function settle(page: Page, frames: number): Promise<void> {
 
 async function shot(page: Page, path: string): Promise<void> {
   await settle(page, 20);
+  const oversizedMarkers = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.marker-bar')]
+      .filter((element) => element.offsetParent !== null)
+      .map((element) => element.getBoundingClientRect().width)
+      .filter((width) => width > 32),
+  );
+  if (oversizedMarkers.length > 0) {
+    throw new Error(`oversized unit marker bars: ${oversizedMarkers.map((width) => width.toFixed(1)).join(', ')}`);
+  }
   await page.screenshot({ path, timeout: 180000 });
   console.log(`[final] wrote ${path}`);
 }

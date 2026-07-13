@@ -14,7 +14,7 @@ import {
   Group,
   InstancedMesh,
   Line,
-  LineBasicMaterial,
+  LineDashedMaterial,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -39,6 +39,7 @@ import {
 } from '../assets/InfantryGenerator.ts';
 import { angleDelta } from '../core/MathUtil.ts';
 import { hash2D } from '../core/Random.ts';
+import { commandPathBudget } from './CommandVisuals.ts';
 
 const POOL_SIZE = 96;
 const POSES: SoldierPose[] = ['stand', 'kneel', 'prone'];
@@ -104,7 +105,14 @@ export class UnitRenderer {
     }
 
     // path lines
-    const lineMat = new LineBasicMaterial({ color: new Color(0.65, 0.8, 0.4), transparent: true, opacity: 0.65 });
+    const lineMat = new LineDashedMaterial({
+      color: new Color(0.68, 0.74, 0.42),
+      transparent: true,
+      opacity: 0.38,
+      dashSize: 2.4,
+      gapSize: 1.6,
+      depthWrite: false,
+    });
     for (let i = 0; i < 20; i++) {
       const line = new Line(new BufferGeometry(), lineMat);
       line.visible = false;
@@ -236,6 +244,7 @@ export class UnitRenderer {
     // selection rings + path lines
     let ringIdx = 0;
     let lineIdx = 0;
+    const pathBudget = commandPathBudget(selection.size);
     for (const id of selection) {
       const u = this.gs.byId.get(id);
       if (!u || !u.alive) continue;
@@ -246,7 +255,7 @@ export class UnitRenderer {
         ring.scale.set(r, 1, r);
         ring.position.set(u.x, u.y + 0.15, u.z);
       }
-      if (u.path && u.pathIndex < u.path.length) {
+      if (lineIdx < pathBudget && u.path && u.pathIndex < u.path.length) {
         const line = this.pathLines[lineIdx++];
         if (line) {
           const pts: number[] = [u.x, u.y + 0.4, u.z];
@@ -257,6 +266,7 @@ export class UnitRenderer {
           }
           line.geometry.setAttribute('position', new Float32BufferAttribute(pts, 3));
           line.geometry.attributes['position']!.needsUpdate = true;
+          line.computeLineDistances();
           line.visible = true;
         }
       }

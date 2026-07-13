@@ -7,6 +7,7 @@
 import type { GameState } from '../game/GameState.ts';
 import type { Commands } from '../game/Commands.ts';
 import { ARCHETYPES, type UnitState } from '../game/Types.ts';
+import { boundedMeterFraction } from './MeterMath.ts';
 
 export interface TacticalHudCallbacks {
   onSpeed: (mult: number) => void;
@@ -276,7 +277,7 @@ export class TacticalHud {
     for (const [id, els] of this.rosterRows) {
       const u = this.gs.byId.get(id);
       if (!u) continue;
-      const hpFrac = Math.max(0, u.hp) / ARCHETYPES[u.cls].maxHp;
+      const hpFrac = boundedMeterFraction(u.hp, ARCHETYPES[u.cls].maxHp);
       els.fill.style.width = `${(hpFrac * 100).toFixed(0)}%`;
       els.fill.className = 'bar-fill' + (hpFrac < 0.3 ? ' critical' : hpFrac < 0.6 ? ' low' : '');
       els.row.classList.toggle('dead', !u.alive);
@@ -313,7 +314,7 @@ export class TacticalHud {
         const track = document.createElement('div');
         track.className = 'bar-track';
         const fill = document.createElement('div');
-        const frac = Math.max(0, u.hp) / arch.maxHp;
+        const frac = boundedMeterFraction(u.hp, arch.maxHp);
         fill.className = 'bar-fill' + (frac < 0.3 ? ' critical' : frac < 0.6 ? ' low' : '');
         fill.style.width = `${frac * 100}%`;
         track.append(fill);

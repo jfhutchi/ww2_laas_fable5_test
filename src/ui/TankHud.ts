@@ -11,6 +11,7 @@ import type { GameState } from '../game/GameState.ts';
 import { ARCHETYPES } from '../game/Types.ts';
 import type { EventBus } from '../core/EventBus.ts';
 import { angleDelta } from '../core/MathUtil.ts';
+import { boundedMeterFraction } from './MeterMath.ts';
 
 export interface TankHudCallbacks {
   onReturnToCommand: () => void;
@@ -225,7 +226,7 @@ export class TankHud {
 
     // readouts
     this.healthVal.textContent = `${Math.max(0, Math.round(u.hp))} / ${arch.maxHp}`;
-    const hf = Math.max(0, u.hp) / arch.maxHp;
+    const hf = boundedMeterFraction(u.hp, arch.maxHp);
     this.root.dataset['condition'] = hf < 0.3 ? 'critical' : hf < 0.6 ? 'damaged' : 'operational';
     this.healthFill.style.width = `${hf * 100}%`;
     this.healthFill.className = 'bar-fill' + (hf < 0.3 ? ' critical' : hf < 0.6 ? ' low' : '');
