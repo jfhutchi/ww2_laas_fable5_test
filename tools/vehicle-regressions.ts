@@ -13,6 +13,7 @@ Object.defineProperty(globalThis, 'document', {
 
 const { buildSherman } = await import('../src/assets/TankGenerator.ts');
 const { buildSoldierGeometry } = await import('../src/assets/InfantryGenerator.ts');
+const { buildBuilding } = await import('../src/assets/BuildingMeshes.ts');
 
 const rig = buildSherman(1944);
 for (const name of ['sherman-running-gear', 'sherman-hull', 'sherman-turret', 'sherman-main-gun']) {
@@ -41,5 +42,26 @@ soldier.computeBoundingBox();
 assert.ok(soldier.boundingBox, 'soldier geometry exposes measurable bounds');
 const soldierSize = soldier.boundingBox.getSize(new Vector3());
 assert.ok(soldierSize.y > 1.55 && soldierSize.y < 2, `standing infantry height is implausible (${soldierSize.y.toFixed(2)}m)`);
+
+const house = buildBuilding(
+  {
+    id: 1,
+    kind: 'shed',
+    x: 0,
+    z: 0,
+    rotation: 0,
+    halfW: 3,
+    halfD: 2.5,
+    wallHeight: 2.8,
+    floors: 1,
+    damage: 'intact',
+    seed: 19,
+  },
+  { height: () => 0 } as never,
+);
+const woodwork = house.children[2];
+assert.ok(woodwork, 'house exposes a dedicated facade-woodwork mesh');
+const woodworkCenter = new Box3().setFromObject(woodwork).getCenter(new Vector3());
+assert.ok(woodworkCenter.z > 2.2, `window and door woodwork is detached from its facade (z=${woodworkCenter.z.toFixed(2)}m)`);
 
 console.log(`vehicle regressions: PASS (${Math.round(triangles)} tank / ${Math.round(soldierTriangles)} soldier triangles)`);
