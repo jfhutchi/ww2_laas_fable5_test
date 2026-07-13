@@ -58,5 +58,12 @@ const leavingSafetyMargin = clipCameraToBuildings(
   () => 0,
 );
 assert.deepEqual(leavingSafetyMargin, { x: 0, y: 4, z: 10 }, 'camera may move out of a facade safety margin');
+const roofCollision = clipCameraToBuildings(
+  { x: 0, y: 10, z: 10 },
+  { x: 0, y: 10, z: -10 },
+  [testBuilding],
+  () => 0,
+);
+assert.ok(roofCollision.z > 6, 'camera collision includes the pitched roof volume');
 
 console.log('control regressions: PASS');

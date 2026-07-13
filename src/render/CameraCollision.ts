@@ -69,7 +69,7 @@ export function clipCameraToBuildings(
     if (exit < 0 || enter > 1) continue;
     const hitT = Math.max(0, enter);
     const hitY = anchor.y + dy * hitT;
-    const roofY = sampleHeight(building.x, building.z) + building.wallHeight + building.halfD * 0.65 + 0.4;
+    const roofY = sampleHeight(building.x, building.z) + building.wallHeight + building.halfD * 1.1 + 0.4;
     if (hitY > roofY) continue;
     earliest = Math.min(earliest, hitT);
   }
