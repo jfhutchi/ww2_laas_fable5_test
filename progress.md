@@ -13,13 +13,19 @@ Original prompt: Preserve the final Fable 5 version on main and build a much bet
 - Replaced 560-triangle box soldiers with 2,144-triangle rounded, posed figures with webbing, pouches, boots, hands, helmets, and side-specific silhouettes.
 - Reframed the tank chase camera to retain the complete vehicle and battlefield context; lifted cool sky and counter-sun bounce so backlit armor remains readable.
 - Verified high/ultra WebGPU captures at 1600x900, with stable world hash, no page errors, and high-preset render throughput above 110 fps after initialization.
+- Ran the complete real-game WebGPU battery twice after major world changes: 18/18 checks green in roughly three minutes per run.
+- Bounded all health meters and formation command paths after live combat captures exposed 4,000%-wide debug-health bars and route-line clutter.
+- Regraded the sky, softened volumetric cloud density/ambient response, and removed the redundant billboard layer for a blue-gray Normandy horizon with white cloud volume.
+- Staged the southern approach with 12 poles, sagging three-wire spans, and objective-corner carts/crates/barrels/rubble while keeping the carriageways clear.
+- Fixed detached building woodwork: frames, panes, doors, shutters, church openings, and tower openings now receive their wall transforms; added external slatted shutters and paneled doors.
+- Added tested third-person building collision so the chase camera cannot enter facade volumes.
 
 ## Current
 
-- Run the complete gameplay and presentation battery against the rebuilt UI, inputs, hero assets, and lighting.
-- Rank the next visual deltas from live combat/mission-state captures, led by architecture detail, repetitive ground scatter, and effects composition.
+- Rerun the complete battery after the facade and camera-collision pass.
+- Review live combat effects and the final mission-state suite for the next highest-impact defect.
 
 ## Next
 
-- Regenerate comparison and final mission-state frames after the full battery is green.
-- Continue the ranked visual-delta loop without changing the deterministic gameplay contract.
+- Regenerate canonical comparison/final frames with the atmosphere, staging, and facade passes.
+- Continue the ranked visual-delta loop without changing the deterministic gameplay contract, then write the final branch/status handoff.
