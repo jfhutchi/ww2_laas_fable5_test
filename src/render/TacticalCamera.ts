@@ -8,6 +8,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import type { Input } from '../core/Input.ts';
 import { clamp, damp, angleDelta } from '../core/MathUtil.ts';
 import type { CameraPose } from '../app/Config.ts';
+import { cameraRelativePan } from './TacticalPan.ts';
 
 const MIN_DIST = 18;
 const MAX_DIST = 220;
@@ -126,29 +127,27 @@ export class TacticalCamera {
       }
 
       // --- pan: WASD/arrows + edge pan
-      let panX = 0;
-      let panZ = 0;
-      if (input.key('W') || input.key('ArrowUp')) panZ -= 1;
-      if (input.key('S') || input.key('ArrowDown')) panZ += 1;
-      if (input.key('A') || input.key('ArrowLeft')) panX -= 1;
-      if (input.key('D') || input.key('ArrowRight')) panX += 1;
+      let strafe = 0;
+      let forward = 0;
+      if (input.key('W') || input.key('ArrowUp')) forward += 1;
+      if (input.key('S') || input.key('ArrowDown')) forward -= 1;
+      if (input.key('A') || input.key('ArrowLeft')) strafe -= 1;
+      if (input.key('D') || input.key('ArrowRight')) strafe += 1;
       if (this.edgePanEnabled && !document.pointerLockElement) {
         const p = input.pointer;
         if (p.x >= 0 && p.y >= 0 && p.x <= viewportW && p.y <= viewportH) {
-          if (p.x < EDGE_PX) panX -= 1;
-          else if (p.x > viewportW - EDGE_PX) panX += 1;
-          if (p.y < EDGE_PX) panZ -= 1;
-          else if (p.y > viewportH - EDGE_PX) panZ += 1;
+          if (p.x < EDGE_PX) strafe -= 1;
+          else if (p.x > viewportW - EDGE_PX) strafe += 1;
+          if (p.y < EDGE_PX) forward += 1;
+          else if (p.y > viewportH - EDGE_PX) forward -= 1;
         }
       }
-      if (panX !== 0 || panZ !== 0) {
-        const len = Math.hypot(panX, panZ);
+      if (strafe !== 0 || forward !== 0) {
+        const pan = cameraRelativePan(this.yaw, strafe, forward);
+        const len = Math.hypot(pan.x, pan.z);
         const s = (PAN_SPEED * this.dist * dt) / len;
-        const sin = Math.sin(this.yaw);
-        const cos = Math.cos(this.yaw);
-        // camera-relative: forward = away from eye along ground
-        this.focusX += (panX * cos - panZ * sin) * s;
-        this.focusZ += (panX * sin + panZ * cos) * s;
+        this.focusX += pan.x * s;
+        this.focusZ += pan.z * s;
       }
 
       this.focusX = clamp(this.focusX, this.boundsMin, this.boundsMax);

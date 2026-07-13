@@ -4,6 +4,8 @@
  * so the fixed-step sim never misses fast taps.
  */
 
+import { pointerButtonMask } from './PointerButtons.ts';
+
 export interface PointerState {
   x: number;
   y: number;
@@ -110,7 +112,7 @@ export class Input {
     };
     const onMouseDown = (e: MouseEvent): void => {
       updatePointer(e);
-      this.pointer.buttons |= 1 << e.button;
+      this.pointer.buttons |= pointerButtonMask(e.button);
       if (e.button === 0) {
         this.downX = this.pointer.x;
         this.downY = this.pointer.y;
@@ -122,7 +124,7 @@ export class Input {
     };
     const onMouseUp = (e: MouseEvent): void => {
       updatePointer(e);
-      this.pointer.buttons &= ~(1 << e.button);
+      this.pointer.buttons &= ~pointerButtonMask(e.button);
       this.clickQueue.push({
         button: e.button,
         x: this.pointer.x,
