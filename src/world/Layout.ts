@@ -832,7 +832,8 @@ export function generateLayout(seed: number): WorldModel {
     }
   }
 
-  // telephone poles along the paved north arm + signs at the crossroads
+  // Telephone poles establish a repeating vertical rhythm on both the town
+  // road and the player's long southern approach.
   const north = armPoints[0] ?? [];
   for (let d = 40; d < 700; d += 42) {
     const p = pointAtRadius(north, d);
@@ -841,8 +842,23 @@ export function generateLayout(seed: number): WorldModel {
     const n = roadDir + Math.PI / 2;
     addProp('pole', p.x + Math.cos(n) * 5.2, p.z + Math.sin(n) * 5.2, roadDir, 1);
   }
+  for (let d = 72; d < 650; d += 48) {
+    const p = pointAtRadius(southArm, d);
+    if (!p) break;
+    const roadDir = dirAtRadius(southArm, d);
+    const n = roadDir - Math.PI / 2;
+    addProp('pole', p.x + Math.cos(n) * 6.1, p.z + Math.sin(n) * 6.1, roadDir, propRng.range(0.94, 1.06));
+  }
   addProp('sign', 6.5, 7.5, armAngles[2] ?? 0, 1);
   addProp('sign', -7, -6, armAngles[0] ?? 0, 1);
+  // Keep the central carriageways clear, but dress their corners so the
+  // objective reads as an inhabited square rather than an empty road decal.
+  addProp('cart', -18, 13, -0.45, 0.92);
+  addProp('crate', -20, 10.5, 0.28, 1.05);
+  addProp('barrel', -17.5, 8.6, -0.12, 1);
+  addProp('crate', 18.5, -12.5, 0.9, 0.9);
+  addProp('barrel', 20, -9.8, 0.18, 1);
+  addProp('rubble', 16.5, 17.5, 0, 1.25);
 
   // bushes along walls
   for (const seg of barriers) {

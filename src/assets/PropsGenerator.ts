@@ -22,12 +22,15 @@ import {
   Euler,
   Group,
   InstancedMesh,
+  LineBasicMaterial,
+  LineSegments,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
   Quaternion,
   TorusGeometry,
   Vector3,
+  Float32BufferAttribute,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { PropSpec, WorldModel } from '../world/WorldTypes.ts';
@@ -610,6 +613,45 @@ export function buildProps(model: WorldModel, ground: Ground): Group {
   }
   if (poleItems.length > 0) group.add(makeInstanced('props-poles', poleArch, MAT_PROP, poleItems));
   else poleArch.dispose();
+
+  // Three gently sagging conductors connect sequential poles on each road
+  // arm. A single line-segment batch adds perspective rhythm for one draw.
+  const wirePositions: number[] = [];
+  const poleGroups = [
+    poles.filter((pole) => pole.z < 0),
+    poles.filter((pole) => pole.z >= 0),
+  ];
+  for (const route of poleGroups) {
+    route.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    for (let i = 0; i < route.length - 1; i++) {
+      const a = route[i];
+      const b = route[i + 1];
+      if (!a || !b || Math.hypot(b.x - a.x, b.z - a.z) > 64) continue;
+      for (const offset of [-0.65, 0, 0.65]) {
+        const ax = a.x - Math.sin(a.rotation) * offset * a.scale;
+        const az = a.z + Math.cos(a.rotation) * offset * a.scale;
+        const bx = b.x - Math.sin(b.rotation) * offset * b.scale;
+        const bz = b.z + Math.cos(b.rotation) * offset * b.scale;
+        const ay = ground.height(a.x, a.z) + 6.9 * a.scale;
+        const by = ground.height(b.x, b.z) + 6.9 * b.scale;
+        const mx = (ax + bx) * 0.5;
+        const my = (ay + by) * 0.5 - 0.55;
+        const mz = (az + bz) * 0.5;
+        wirePositions.push(ax, ay, az, mx, my, mz, mx, my, mz, bx, by, bz);
+      }
+    }
+  }
+  if (wirePositions.length > 0) {
+    const wireGeometry = new BufferGeometry();
+    wireGeometry.setAttribute('position', new Float32BufferAttribute(wirePositions, 3));
+    const wires = new LineSegments(
+      wireGeometry,
+      new LineBasicMaterial({ color: new Color(0.08, 0.075, 0.065), transparent: true, opacity: 0.72 }),
+    );
+    wires.name = 'props-telephone-wires';
+    wires.frustumCulled = false;
+    group.add(wires);
+  }
 
   // ---- haystacks: two variants, non-uniform per-instance scale
   const hayArchs = [haystackArchetype(arch.fork('hay-a')), haystackArchetype(arch.fork('hay-b'))];
