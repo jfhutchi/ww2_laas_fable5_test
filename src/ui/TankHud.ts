@@ -42,7 +42,13 @@ export class TankHud {
   ) {
     this.root = document.createElement('div');
     this.root.id = 'tank-hud';
+    this.root.dataset['interface'] = 'armor-station';
+    this.root.setAttribute('aria-label', 'Tank direct-control interface');
     parent.append(this.root);
+    const station = document.createElement('div');
+    station.className = 'hud-station-label tank';
+    station.innerHTML = '<span>ARMOR STATION</span><strong>M4A1 // GUNNER</strong>';
+    this.root.append(station);
 
     // objective box
     const obj = document.createElement('div');
@@ -133,6 +139,7 @@ export class TankHud {
     const ret = document.createElement('button');
     ret.id = 'tank-return';
     ret.className = 'menu-btn secondary';
+    ret.type = 'button';
     ret.textContent = 'RETURN TO COMMAND (TAB)';
     ret.addEventListener('click', () => cb.onReturnToCommand());
     this.root.append(ret);
@@ -219,6 +226,7 @@ export class TankHud {
     // readouts
     this.healthVal.textContent = `${Math.max(0, Math.round(u.hp))} / ${arch.maxHp}`;
     const hf = Math.max(0, u.hp) / arch.maxHp;
+    this.root.dataset['condition'] = hf < 0.3 ? 'critical' : hf < 0.6 ? 'damaged' : 'operational';
     this.healthFill.style.width = `${hf * 100}%`;
     this.healthFill.className = 'bar-fill' + (hf < 0.3 ? ' critical' : hf < 0.6 ? ' low' : '');
     const w0 = u.weapons[0];

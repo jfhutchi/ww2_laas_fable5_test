@@ -52,7 +52,13 @@ export class TacticalHud {
   ) {
     this.root = document.createElement('div');
     this.root.id = 'tactical-hud';
+    this.root.dataset['interface'] = 'command-net';
+    this.root.setAttribute('aria-label', 'Tactical command interface');
     parent.append(this.root);
+    const station = document.createElement('div');
+    station.className = 'hud-station-label';
+    station.innerHTML = '<span>COMMAND NET</span><strong>ABLE // TACTICAL</strong>';
+    this.root.append(station);
     // objective + roster stack in a flex column so they can never overlap
     this.leftColumn = document.createElement('div');
     this.leftColumn.id = 'left-column';
@@ -112,6 +118,7 @@ export class TacticalHud {
     for (const [label, mult] of speeds) {
       const b = document.createElement('button');
       b.className = 'time-btn';
+      b.type = 'button';
       b.textContent = label;
       b.addEventListener('click', () => {
         this.gs.bus.emit('ui:click', {});
@@ -122,6 +129,7 @@ export class TacticalHud {
     }
     const menu = document.createElement('button');
     menu.className = 'time-btn menu';
+    menu.type = 'button';
     menu.textContent = 'MENU';
     menu.addEventListener('click', () => this.cb.onMenu());
     p.append(menu);
@@ -159,6 +167,9 @@ export class TacticalHud {
       if (u.side !== 'player') continue;
       const row = document.createElement('div');
       row.className = 'roster-row';
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-label', `Select ${ARCHETYPES[u.cls].label} ${u.callsign}`);
       const num = document.createElement('div');
       num.className = 'roster-num';
       num.textContent = u.callsign;
@@ -180,6 +191,12 @@ export class TacticalHud {
       row.append(num, glyph, mid);
       row.addEventListener('click', (e) => {
         this.commands.select([u.id], e.shiftKey);
+      });
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.commands.select([u.id], e.shiftKey);
+        }
       });
       row.addEventListener('dblclick', () => this.cb.onFocusUnit(u));
       this.rosterBox.append(row);
@@ -203,6 +220,7 @@ export class TacticalHud {
     for (const [label, key, fn] of cmds) {
       const b = document.createElement('button');
       b.className = 'cmd-btn';
+      b.type = 'button';
       const k = document.createElement('span');
       k.className = 'cmd-key';
       k.textContent = key;
@@ -245,6 +263,7 @@ export class TacticalHud {
 
     // capture
     this.captureState.textContent = capture.state;
+    this.root.dataset['capture'] = capture.state.toLowerCase().replaceAll(' ', '-');
     this.captureState.className = '';
     this.captureState.id = 'capture-state';
     if (capture.state === 'Contested') this.captureState.classList.add('contested');
@@ -263,6 +282,7 @@ export class TacticalHud {
       els.row.classList.toggle('dead', !u.alive);
       els.row.classList.toggle('selected', this.commands.selection.has(id));
       els.row.classList.toggle('suppressed', u.pinned);
+      els.row.dataset['status'] = !u.alive ? 'lost' : u.pinned ? 'pinned' : this.commands.selection.has(id) ? 'selected' : 'ready';
     }
 
     // selection detail

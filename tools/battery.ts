@@ -170,7 +170,7 @@ const checks: Check[] = [
       assert(!tactical.panelsOverlap, 'objective and roster panels overlap');
       assert(tactical.commandInside, 'tactical command panel leaves the viewport');
 
-      await page.keyboard.press('Tab');
+      await page.focus('#time-controls button');
       const focus = await page.evaluate(() => {
         const active = document.activeElement as HTMLElement | null;
         const style = active ? getComputedStyle(active) : null;

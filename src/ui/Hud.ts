@@ -9,6 +9,7 @@ export class Hud {
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
     this.root.id = 'hud-root';
+    this.root.dataset['instrument'] = 'field';
     parent.append(this.root);
   }
 

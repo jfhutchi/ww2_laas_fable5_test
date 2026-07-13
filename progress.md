@@ -8,11 +8,12 @@ Original prompt: Preserve the final Fable 5 version on main and build a much bet
 - Replaced the incorrect pan transform with tested camera-relative WASD/edge movement.
 - Rebuilt the menu DOM and CSS as a responsive field-operations dossier with bundled OFL fonts.
 - Verified the menu contract in the battery, inspected WebGPU captures at 1280x720 and 720x900, and confirmed zero in-page errors.
+- Unified tactical and tank HUDs around the dossier instrument system; added explicit mode/state semantics, keyboard-operable roster rows, focus proof, and non-overlap assertions.
 
 ## Current
 
 - Add text-state and deterministic time-step compatibility for the web-game test client where it can reuse existing hooks.
-- Build the shared tactical/tank HUD instrument pass and verify non-overlap/focus behavior.
+- Rank and attack the largest visual deltas visible in the new tactical and tank captures.
 
 ## Next
 
