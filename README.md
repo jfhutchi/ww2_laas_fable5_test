@@ -2,7 +2,7 @@
 
 A complete, playable WWII combined-arms browser game: command a small American force to capture and hold a procedurally generated Normandy village crossroads — from an RTS-style tactical view or from behind the gun of any of your Shermans, switching at will.
 
-**WebGPU only · three.js WebGPURenderer · TypeScript strict · Vite · 100% procedural runtime assets · deterministic from `?seed=N`**
+**WebGPU only · three.js WebGPURenderer · TypeScript strict · Vite · procedural geometry + bundled CC0 PBR surfaces · deterministic from `?seed=N`**
 
 ![Tactical view](shots/final/tactical_overhead.png)
 ![Third-person tank](shots/final/third_person_tank.png)
@@ -25,7 +25,7 @@ npm run typecheck    # tsc --noEmit (strict, zero any)
 npm run build        # typecheck + production bundle
 npm run shoot        # Playwright: tactical/tank/HUD screenshots → shots/
 npm run compare      # side-by-sides vs references/ → shots/compare/
-npm run battery      # 15-check gameplay verification battery
+npm run battery      # 18-check gameplay + presentation verification battery
 npx tsx tools/final-shots.ts   # full final screenshot suite → shots/final/
 ```
 
@@ -51,7 +51,7 @@ See [docs/CONTROLS.md](docs/CONTROLS.md) for the full table. Essentials:
 | Left click / drag | Select / box-select |
 | Right click | Move — on a spotted enemy: attack |
 | A / G / S / H | Attack-move / attack-ground / stop / hold |
-| WASD | Pan camera (tactical) · drive (tank) |
+| WASD | Pan relative to the tactical camera · drive (tank) |
 | Mouse | Aim turret (tank mode) · LMB cannon, RMB MG |
 | Space / Esc / F3 | Pause · menu · debug HUD |
 

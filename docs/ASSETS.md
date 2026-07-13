@@ -47,7 +47,7 @@ Notes:
   rejected — wrong palette/structure for Normandy; not committed.
 - A Poly Haven golden-hour puresky HDRI was considered and **not wired**: a
   prior photographic-sky trial was rejected as blurry (see the comment in
-  `App.init`), and the current procedural dome + billboard/volumetric cloud
-  deck is an approved look. Revisit only with a side-by-side.
+  `App.init`), and the current procedural dome + softened volumetric cloud
+  deck is the verified look. The redundant horizon billboard layer is disabled.
 - Everything else in the game (meshes, minimap canvas, FX sprites, audio)
   remains procedurally generated in code — see TECHNICAL_NOTES.md.
