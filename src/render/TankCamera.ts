@@ -15,7 +15,7 @@ export interface TankCameraTarget {
 }
 
 export const TANK_CAMERA_PRESETS = [
-  { back: 9.3, up: 3.6, side: 0.9, fov: 48 }, // complete vehicle plus useful battlefield context
+  { back: 10, up: 4.1, side: 0.9, fov: 48 }, // complete vehicle plus useful battlefield context
   { back: 12, up: 4.4, side: 1.6, fov: 48 },
   { back: 5.6, up: 2.2, side: 0.9, fov: 56 },
 ] as const;

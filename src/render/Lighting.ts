@@ -75,11 +75,11 @@ export class Lighting {
     // Sky fill: cool blue sky, warm earthy ground bounce. Keeps shadow floors lifted.
     // Environment IBL (render/Environment.ts) carries most ambient now;
     // the hemisphere is a low-level floor so nothing can ever crush black.
-    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.2);
+    this.hemi = new HemisphereLight(new Color(0.6, 0.68, 0.84), new Color(0.44, 0.39, 0.29), 0.28);
     scene.add(this.hemi);
 
     // Counter-sun bounce fill so backlit hulls/figures keep their read.
-    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.28);
+    const fill = new DirectionalLight(new Color(0.72, 0.74, 0.8), 0.45);
     fill.position.copy(this.sunDir).multiplyScalar(360); // opposite the sun
     fill.castShadow = false;
     scene.add(fill);
