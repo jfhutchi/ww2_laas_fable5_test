@@ -46,17 +46,18 @@ async function shot(page: Page, path: string): Promise<void> {
 }
 
 /** Aim the tactical camera at the objective so staged frames show the fight. */
-async function focusObjective(page: Page, dist: number): Promise<void> {
-  await page.evaluate((d) => {
+async function focusObjective(page: Page, dist: number, pitch?: number): Promise<void> {
+  await page.evaluate(({ d, pitch }) => {
     interface Dbg {
-      app: { tacticalCam: { focusOn(x: number, z: number, dist?: number): void; yaw: number } };
+      app: { tacticalCam: { focusOn(x: number, z: number, dist?: number): void; yaw: number; pitch: number } };
     }
     const api = window.__oc.api;
     const dbg = (window as unknown as { __ocDebug?: Dbg }).__ocDebug;
     if (!api || !dbg) return;
     const obj = api.objective();
     dbg.app.tacticalCam.focusOn(obj.x, obj.z + 14, d);
-  }, dist);
+    if (pitch !== undefined) dbg.app.tacticalCam.pitch = pitch;
+  }, { d: dist, pitch });
 }
 
 /** Stage the controlled Sherman on the south road inside the rebuilt town. */
@@ -104,7 +105,7 @@ async function main(): Promise<void> {
 
   // 1. tactical overhead — framed on the village crossroads
   await boot(page, { mode: 'tactical', freeze: true });
-  await focusObjective(page, 140);
+  await focusObjective(page, 128, 0.78);
   await shot(page, 'shots/final/tactical_overhead.png');
 
   // 2. third-person tank
